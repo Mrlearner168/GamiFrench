@@ -1,12 +1,14 @@
 import { router } from 'expo-router';
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { GameHeader, ProgressBar, StatPill } from '@/components/game-ui';
 
 const missions = [
   {
@@ -62,60 +64,51 @@ export default function Journey() {
       item.challenge && styles.challengeCard,
     ];
 
+    const statusLabel = item.status === 'completed' ? 'Completed' : item.status === 'current' ? 'Current' : 'Locked';
+
     return (
-      <TouchableOpacity
-        activeOpacity={0.8}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${item.title}, ${statusLabel}`}
         disabled={item.status === 'locked'}
-        style={cardStyle}
         onPress={() => openMission(item)}
+        style={({ pressed }) => [cardStyle, pressed && styles.pressed, item.status === 'locked' && styles.lockedCard]}
       >
         <View style={styles.headerRow}>
-          <Text style={styles.missionNumber}>
-            Mission {item.id}
-          </Text>
-
-          <Text style={styles.status}>
-            {item.status === 'completed'
-              ? '✅ Completed'
-              : item.status === 'current'
-              ? '⭐ Current'
-              : '🔒 Locked'}
-          </Text>
+          <Text style={styles.missionNumber}>MISSION {String(item.id).padStart(2, '0')}</Text>
+          <View style={[styles.statusBadge, item.status === 'completed' && styles.completedBadge, item.status === 'locked' && styles.lockedBadge]}>
+            <Text style={styles.status}>{statusLabel}</Text>
+          </View>
         </View>
 
-        <Text style={styles.title}>
-          {item.title}
-        </Text>
+        <Text style={styles.title}>{item.title}</Text>
+        <Text style={styles.cardMeta}>{item.status === 'locked' ? 'Complete the previous mission to unlock' : item.status === 'current' ? 'Ready for your next French lesson' : 'Lesson complete - review anytime'}</Text>
 
         {item.challenge && (
-          <Text style={styles.challenge}>
-            🏆 Stage Challenge
-          </Text>
+          <View style={styles.challengeRow}><Text style={styles.challenge}>STAGE CHALLENGE</Text><Text style={styles.challengeReward}>+250 XP</Text></View>
         )}
-      </TouchableOpacity>
+      </Pressable>
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-
-      <Text style={styles.stage}>
-        🌻 Stage 1
-      </Text>
-
-      <Text style={styles.stageName}>
-        The Village
-      </Text>
-
-      <Text style={styles.subtitle}>
-        Complete missions to continue your journey.
-      </Text>
+      <View style={styles.topBar}>
+        <StatPill icon="⭐" value="1,280" label="XP" />
+        <StatPill icon="🔥" value="4" label="day streak" />
+        <StatPill icon="❤️" value="5" label="hearts" />
+      </View>
+      <GameHeader eyebrow="STAGE 01  /  THE VILLAGE" title="Your journey" subtitle="Complete each mission to unlock the next part of the story." />
+      <View style={styles.progressSection}>
+        <View style={styles.progressLabels}><Text style={styles.progressTitle}>Stage progress</Text><Text style={styles.progressValue}>2 / 5 missions</Text></View>
+        <ProgressBar value={0.4} />
+      </View>
 
       <FlatList
         data={missions}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderMission}
-        contentContainerStyle={{ paddingBottom: 30 }}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
 
@@ -127,76 +120,63 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
-    padding: 20,
+    backgroundColor: '#F4F7FA',
   },
-
-  stage: {
-    fontSize: 18,
-    color: '#666',
-  },
-
-  stageName: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1E3A8A',
-    marginTop: 5,
-  },
-
-  subtitle: {
-    marginTop: 10,
-    marginBottom: 25,
-    color: '#666',
-    fontSize: 15,
-  },
+  topBar: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4 },
+  progressSection: { paddingHorizontal: 20, marginBottom: 14 },
+  progressLabels: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  progressTitle: { color: '#344054', fontSize: 13, fontWeight: '700' },
+  progressValue: { color: '#1577D4', fontSize: 13, fontWeight: '800' },
+  listContent: { paddingHorizontal: 20, paddingBottom: 30 },
 
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 15,
+    borderRadius: 18,
     padding: 18,
-    marginBottom: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E1E8F0',
+    shadowColor: '#21344D',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
     elevation: 2,
   },
 
   currentCard: {
     borderWidth: 2,
-    borderColor: '#2563EB',
+    borderColor: '#1577D4',
   },
 
   challengeCard: {
-    backgroundColor: '#FFF8DC',
+    backgroundColor: '#FFF9E8',
+    borderColor: '#F2D48B',
   },
-
-  headerRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+  lockedCard: { opacity: 0.58 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
 
   missionNumber: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#444',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: '#667085',
   },
-
-  status: {
-    fontSize: 14,
-    marginLeft: 8,
-  },
+  statusBadge: { backgroundColor: '#E7F1FB', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  completedBadge: { backgroundColor: '#E4F7EE' },
+  lockedBadge: { backgroundColor: '#EEF1F4' },
+  status: { fontSize: 11, fontWeight: '800', color: '#1577D4' },
 
   title: {
-    marginTop: 12,
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#222',
+    marginTop: 14,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '800',
+    color: '#182133',
   },
-
-  challenge: {
-    marginTop: 10,
-    color: '#B8860B',
-    fontWeight: 'bold',
-    fontSize: 15,
-  },
+  cardMeta: { marginTop: 5, color: '#7A8798', fontSize: 13, lineHeight: 19 },
+  challengeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F0DCA8' },
+  challenge: { color: '#B36B00', fontWeight: '800', fontSize: 11, letterSpacing: 1 },
+  challengeReward: { color: '#B36B00', fontWeight: '800', fontSize: 12 },
+  pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
 
 });

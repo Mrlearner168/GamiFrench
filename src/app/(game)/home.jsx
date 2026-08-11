@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { router } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -8,8 +9,16 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+
+import { useAuth } from '@/store/auth-context';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
   Dimensions.get('window');
@@ -21,7 +30,6 @@ const MAP_HEIGHT = Math.max(1500, SCREEN_HEIGHT * 2);
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 2.5;
-const ZOOM_STEP = 0.25;
 
 const NODE_SIZE = isSmallScreen
   ? 62
@@ -46,16 +54,6 @@ const COLORS = {
   yellow: '#FACC15',
 
   background: '#86C440',
-};
-
-const PLAYER = {
-  name: 'Traveler',
-  level: 6,
-  xp: 1280,
-  maxXp: 1800,
-  coins: 540,
-  hearts: 5,
-  streak: 4,
 };
 
 const NODES = [
@@ -156,41 +154,69 @@ function generateRoadPath() {
 
 export default function Home() {
   const insets = useSafeAreaInsets();
+  const { session, authenticatedRequest } = useAuth();
+  const [progress, setProgress] = useState(null);
 
-  const [zoom, setZoom] = useState(1);
+  useEffect(() => {
+    let mounted = true;
+
+    authenticatedRequest('/profile')
+      .then((profile) => {
+        if (mounted) setProgress(profile.progress);
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
+    };
+  }, [authenticatedRequest]);
+
+  const zoom = useSharedValue(MIN_ZOOM);
+  const savedZoom = useSharedValue(MIN_ZOOM);
 
   const roadPath = useMemo(() => {
     return generateRoadPath();
   }, []);
 
-  const zoomIn = () => {
-    setZoom((currentZoom) => {
-      return Math.min(
-        currentZoom + ZOOM_STEP,
-        MAX_ZOOM
+  const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      savedZoom.value = zoom.value;
+    })
+    .onUpdate((event) => {
+      zoom.value = Math.min(
+        Math.max(savedZoom.value * event.scale, MIN_ZOOM),
+        MAX_ZOOM,
+      );
+    })
+    .onEnd(() => {
+      zoom.value = withSpring(
+        Math.min(Math.max(zoom.value, MIN_ZOOM), MAX_ZOOM),
       );
     });
-  };
 
-  const zoomOut = () => {
-    setZoom((currentZoom) => {
-      return Math.max(
-        currentZoom - ZOOM_STEP,
-        MIN_ZOOM
-      );
-    });
-  };
-
-  const resetZoom = () => {
-    setZoom(MIN_ZOOM);
-  };
+  const mapAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: zoom.value }],
+  }));
 
   const handleNodePress = (node) => {
     if (node.status === 'locked') {
       return;
     }
 
-    console.log('[Home] Opening lesson:', node.lesson);
+    router.push({
+      pathname: '/lesson',
+      params: { id: String(node.id) },
+    });
+  };
+
+  const player = {
+    name: session?.user?.displayName ?? 'Traveler',
+    level: progress?.level ?? 1,
+    xp: progress?.xp ?? 0,
+    maxXp: 1800,
+    coins: 540,
+    hearts: 5,
+    streak: progress?.streak ?? 0,
   };
 
   return (
@@ -218,29 +244,23 @@ export default function Home() {
             bounces={true}
             nestedScrollEnabled={true}
           >
-            <View
-              style={[
-                styles.mapScaleContainer,
-                {
-                  height:
-                    MAP_HEIGHT * zoom,
-                },
-              ]}
-            >
+            <GestureDetector gesture={pinchGesture}>
               <View
                 style={[
-                  styles.mapZoomLayer,
-                  {
-                    width: SCREEN_WIDTH,
-                    height: MAP_HEIGHT,
-                    transform: [
-                      {
-                        scale: zoom,
-                      },
-                    ],
-                  },
+                  styles.mapScaleContainer,
+                  { height: MAP_HEIGHT },
                 ]}
               >
+                <Animated.View
+                  style={[
+                    styles.mapZoomLayer,
+                    {
+                      width: SCREEN_WIDTH,
+                      height: MAP_HEIGHT,
+                    },
+                    mapAnimatedStyle,
+                  ]}
+                >
                 <ImageBackground
                   source={require('../../../assets/images/background/background.png')}
                   style={[
@@ -395,53 +415,10 @@ export default function Home() {
                     );
                   })}
                 </ImageBackground>
+                </Animated.View>
               </View>
-            </View>
+            </GestureDetector>
           </ScrollView>
-        </View>
-
-        {/* =========================================================
-            ZOOM CONTROLS
-        ========================================================= */}
-
-        <View style={styles.zoomControls}>
-
-          <Pressable
-            onPress={zoomIn}
-            style={({ pressed }) => [
-              styles.zoomButton,
-              pressed && styles.zoomButtonPressed,
-            ]}
-          >
-            <Text style={styles.zoomText}>
-              +
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={resetZoom}
-            style={({ pressed }) => [
-              styles.zoomButton,
-              pressed && styles.zoomButtonPressed,
-            ]}
-          >
-            <Text style={styles.resetText}>
-              ⛶
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={zoomOut}
-            style={({ pressed }) => [
-              styles.zoomButton,
-              pressed && styles.zoomButtonPressed,
-            ]}
-          >
-            <Text style={styles.zoomText}>
-              −
-            </Text>
-          </Pressable>
-
         </View>
 
         {/* =========================================================
@@ -456,7 +433,15 @@ export default function Home() {
             },
           ]}
         >
-          <View style={styles.profileArea}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            onPress={() => router.push('/profile')}
+            style={({ pressed }) => [
+              styles.profileArea,
+              pressed && styles.profilePressed,
+            ]}
+          >
 
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
@@ -473,33 +458,33 @@ export default function Home() {
                 style={styles.playerName}
                 numberOfLines={1}
               >
-                {PLAYER.name}
+                {player.name}
               </Text>
             </View>
 
-          </View>
+          </Pressable>
 
           <View style={styles.statsArea}>
 
             <Stat
               icon="⭐"
-              value={`Lv.${PLAYER.level}`}
-              sub={`${PLAYER.xp}/${PLAYER.maxXp}`}
+              value={`Lv.${player.level}`}
+              sub={`${player.xp}/${player.maxXp}`}
             />
 
             <Stat
               icon="🪙"
-              value={PLAYER.coins}
+              value={player.coins}
             />
 
             <Stat
               icon="🔥"
-              value={PLAYER.streak}
+              value={player.streak}
             />
 
             <Stat
               icon="❤️"
-              value={PLAYER.hearts}
+              value={player.hearts}
             />
 
           </View>
@@ -521,7 +506,7 @@ export default function Home() {
           <View style={styles.progressCard}>
 
             <Text style={styles.cardHeading}>
-              🎯 Today's Goal
+              🎯 Today&apos;s Goal
             </Text>
 
             <Text style={styles.cardSmallText}>
@@ -605,8 +590,13 @@ export default function Home() {
 
             <Pressable
               onPress={() =>
-                console.log('[Home] Continue Learning')
+                router.push({
+                  pathname: '/lesson',
+                  params: { id: '3' },
+                })
               }
+              accessibilityRole="button"
+              accessibilityLabel="Continue learning Green Forest, lesson 3"
               style={({ pressed }) => [
                 styles.continueButton,
                 pressed && styles.buttonPressed,
@@ -702,63 +692,6 @@ const styles = StyleSheet.create({
 
   mapBackground: {
     width: SCREEN_WIDTH,
-  },
-
-  /*
-  |--------------------------------------------------------------------------
-  | ZOOM CONTROLS
-  |--------------------------------------------------------------------------
-  */
-
-  zoomControls: {
-    position: 'absolute',
-    right: 12,
-    top: SCREEN_HEIGHT * 0.42,
-
-    backgroundColor: 'rgba(255,255,255,0.95)',
-
-    borderRadius: 16,
-    overflow: 'hidden',
-
-    shadowColor: '#000',
-
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-
-    shadowOpacity: 0.18,
-    shadowRadius: 7,
-
-    elevation: 7,
-  },
-
-  zoomButton: {
-    width: 44,
-    height: 44,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-
-  zoomButtonPressed: {
-    backgroundColor: '#E5E7EB',
-  },
-
-  zoomText: {
-    color: COLORS.dark,
-    fontSize: 28,
-    fontWeight: '700',
-    lineHeight: 30,
-  },
-
-  resetText: {
-    color: COLORS.blueDark,
-    fontSize: 18,
-    fontWeight: '900',
   },
 
   /*
@@ -963,6 +896,10 @@ const styles = StyleSheet.create({
     flexShrink: 1,
 
     marginRight: 8,
+  },
+
+  profilePressed: {
+    opacity: 0.75,
   },
 
   avatar: {
