@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
-    SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { lessons } from '../../data/lessons';
 
@@ -49,6 +50,7 @@ export default function Lesson() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
       <Text style={styles.stage}>
         {lesson.stage}
@@ -123,6 +125,7 @@ export default function Lesson() {
         </TouchableOpacity>
 
       </View>
+      </ScrollView>
 
     </SafeAreaView>
   );
@@ -133,8 +136,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
+  },
+  content: {
     padding: 20,
-    justifyContent: 'space-between',
+    paddingBottom: 36,
   },
 
   stage: {

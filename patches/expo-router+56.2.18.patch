@@ -1,0 +1,13 @@
+diff --git a/node_modules/expo-router/build/react-navigation/core/useNavigationCache.js b/node_modules/expo-router/build/react-navigation/core/useNavigationCache.js
+index 7f35897..2bd6814 100644
+--- a/node_modules/expo-router/build/react-navigation/core/useNavigationCache.js
++++ b/node_modules/expo-router/build/react-navigation/core/useNavigationCache.js
+@@ -107,7 +107,7 @@ function useNavigationCache({ state, getState, navigation, setOptions, router, e
+             const withStack = (callback) => {
+                 let isStackSet = false;
+                 try {
+-                    if (process.env.NODE_ENV !== 'production' && stackRef && !stackRef.current) {
++                    if (process.env.NODE_ENV !== 'production' && stackRef && !Object.isFrozen(stackRef) && !stackRef.current) {
+                         // Capture the stack trace for devtools
+                         stackRef.current = new Error().stack;
+                         isStackSet = true;

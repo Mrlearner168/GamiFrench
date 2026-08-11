@@ -1,11 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import {
-    SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function Mission() {
   const { id, title, challenge } = useLocalSearchParams();
@@ -23,6 +24,7 @@ export default function Mission() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
       <Text style={styles.header}>📜 Mission Brief</Text>
 
@@ -99,6 +101,7 @@ export default function Mission() {
           Start Mission
         </Text>
       </TouchableOpacity>
+      </ScrollView>
 
     </SafeAreaView>
   );
@@ -109,7 +112,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
+  },
+  content: {
     padding: 20,
+    paddingBottom: 36,
+    flexGrow: 1,
     justifyContent: 'space-between',
   },
 

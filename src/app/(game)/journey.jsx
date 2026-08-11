@@ -1,12 +1,12 @@
 import { router } from 'expo-router';
 import {
     FlatList,
-    SafeAreaView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const missions = [
   {
@@ -169,6 +169,7 @@ const styles = StyleSheet.create({
 
   headerRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
@@ -181,6 +182,7 @@ const styles = StyleSheet.create({
 
   status: {
     fontSize: 14,
+    marginLeft: 8,
   },
 
   title: {

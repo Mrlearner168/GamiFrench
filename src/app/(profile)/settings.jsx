@@ -1,13 +1,13 @@
 import { useAuth } from '@/store/auth-context';
 import { useEffect, useState } from 'react';
 import {
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function Settings() {
   const [preferences, setPreferences] = useState([]);
@@ -28,7 +28,7 @@ export default function Settings() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.pageTitle}>Settings</Text>
           <Text style={styles.pageSubtitle}>

@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
-    SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { quizzes } from '../../data/quizzes';
 
@@ -57,6 +58,7 @@ export default function Quiz() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
       <Text style={styles.progress}>
         Question {current + 1} / {questions.length}
@@ -83,6 +85,7 @@ export default function Quiz() {
         </TouchableOpacity>
 
       ))}
+      </ScrollView>
 
     </SafeAreaView>
   );
@@ -93,7 +96,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
+  },
+  content: {
     padding: 20,
+    paddingBottom: 36,
   },
 
   progress: {

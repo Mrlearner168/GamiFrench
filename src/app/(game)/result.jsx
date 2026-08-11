@@ -2,12 +2,13 @@ import { useAuth } from '@/store/auth-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function Result() {
 
@@ -48,6 +49,7 @@ export default function Result() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
       <Text style={styles.title}>
         🎉 Mission Complete
@@ -92,6 +94,7 @@ export default function Result() {
       <Text style={styles.footer}>
         Next Mission: {nextMission}
       </Text>
+      </ScrollView>
 
     </SafeAreaView>
   );
@@ -102,8 +105,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
+  },
+  content: {
+    flexGrow: 1,
     justifyContent: 'space-between',
     padding: 20,
+    paddingBottom: 36,
   },
 
   title: {

@@ -3,12 +3,12 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   FlatList,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const statusText = {
   earned: 'Earned',

@@ -1,22 +1,13 @@
-import { useRef } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  Animated,
   Dimensions,
   ImageBackground,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import {
-  Gesture,
-  GestureDetector,
-} from 'react-native-gesture-handler';
-import {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring
-} from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
@@ -30,8 +21,13 @@ const MAP_HEIGHT = Math.max(1500, SCREEN_HEIGHT * 2);
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 2.5;
+const ZOOM_STEP = 0.25;
 
-const NODE_SIZE = isSmallScreen ? 62 : isTablet ? 82 : 70;
+const NODE_SIZE = isSmallScreen
+  ? 62
+  : isTablet
+    ? 82
+    : 70;
 
 const COLORS = {
   white: '#FFFFFF',
@@ -61,12 +57,6 @@ const PLAYER = {
   hearts: 5,
   streak: 4,
 };
-
-/*
-|--------------------------------------------------------------------------
-| JOURNEY NODES
-|--------------------------------------------------------------------------
-*/
 
 const NODES = [
   {
@@ -130,24 +120,18 @@ const NODES = [
   },
 ];
 
-/*
-|--------------------------------------------------------------------------
-| ROAD COORDINATES
-|--------------------------------------------------------------------------
-*/
-
-const getNodeX = (node) => {
+function getNodeX(node) {
   return SCREEN_WIDTH * node.left;
-};
+}
 
-const generateRoadPath = () => {
+function generateRoadPath() {
   if (!NODES.length) {
     return '';
   }
 
   let path = `M ${getNodeX(NODES[0])} ${NODES[0].top}`;
 
-  for (let i = 1; i < NODES.length; i++) {
+  for (let i = 1; i < NODES.length; i += 1) {
     const previous = NODES[i - 1];
     const current = NODES[i];
 
@@ -168,184 +152,46 @@ const generateRoadPath = () => {
   }
 
   return path;
-};
+}
 
 export default function Home() {
   const insets = useSafeAreaInsets();
 
-  const scrollY = useRef(
-    new Animated.Value(0)
-  ).current;
+  const [zoom, setZoom] = useState(1);
 
-  /*
-  |--------------------------------------------------------------------------
-  | ZOOM STATE
-  |--------------------------------------------------------------------------
-  */
-
-  const scale = useSharedValue(1);
-
-  const savedScale = useSharedValue(1);
-
-  /*
-  |--------------------------------------------------------------------------
-  | PAN STATE
-  |--------------------------------------------------------------------------
-  */
-
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-
-  const savedTranslateX = useSharedValue(0);
-  const savedTranslateY = useSharedValue(0);
-
-  /*
-  |--------------------------------------------------------------------------
-  | PINCH GESTURE
-  |--------------------------------------------------------------------------
-  */
-
-  const pinchGesture = Gesture.Pinch()
-
-    .onStart(() => {
-      savedScale.value = scale.value;
-    })
-
-    .onUpdate((event) => {
-      let nextScale =
-        savedScale.value * event.scale;
-
-      if (nextScale < MIN_ZOOM) {
-        nextScale = MIN_ZOOM;
-      }
-
-      if (nextScale > MAX_ZOOM) {
-        nextScale = MAX_ZOOM;
-      }
-
-      scale.value = nextScale;
-    })
-
-    .onEnd(() => {
-      if (scale.value < MIN_ZOOM) {
-        scale.value = withSpring(MIN_ZOOM);
-      }
-
-      if (scale.value > MAX_ZOOM) {
-        scale.value = withSpring(MAX_ZOOM);
-      }
-    });
-
-  /*
-  |--------------------------------------------------------------------------
-  | PAN GESTURE
-  |--------------------------------------------------------------------------
-  */
-
-  const panGesture = Gesture.Pan()
-
-    .onStart(() => {
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
-    })
-
-    .onUpdate((event) => {
-      /*
-       * Allow map movement only while zoomed.
-       */
-
-      if (scale.value <= 1) {
-        translateX.value = 0;
-        translateY.value = 0;
-        return;
-      }
-
-      translateX.value =
-        savedTranslateX.value + event.translationX;
-
-      translateY.value =
-        savedTranslateY.value + event.translationY;
-    });
-
-  /*
-  |--------------------------------------------------------------------------
-  | COMBINE PINCH + PAN
-  |--------------------------------------------------------------------------
-  */
-
-  const mapGesture = Gesture.Simultaneous(
-    pinchGesture,
-    panGesture
-  );
-
-  /*
-  |--------------------------------------------------------------------------
-  | MAP ANIMATION
-  |--------------------------------------------------------------------------
-  */
-
-  const mapAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [
-        {
-          translateX: translateX.value,
-        },
-        {
-          translateY: translateY.value,
-        },
-        {
-          scale: scale.value,
-        },
-      ],
-    };
-  });
-
-  /*
-  |--------------------------------------------------------------------------
-  | ZOOM CONTROLS
-  |--------------------------------------------------------------------------
-  */
+  const roadPath = useMemo(() => {
+    return generateRoadPath();
+  }, []);
 
   const zoomIn = () => {
-    scale.value = withSpring(
-      Math.min(scale.value + 0.25, MAX_ZOOM)
-    );
+    setZoom((currentZoom) => {
+      return Math.min(
+        currentZoom + ZOOM_STEP,
+        MAX_ZOOM
+      );
+    });
   };
 
   const zoomOut = () => {
-    scale.value = withSpring(
-      Math.max(scale.value - 0.25, MIN_ZOOM)
-    );
-
-    if (scale.value <= 1) {
-      translateX.value = withSpring(0);
-      translateY.value = withSpring(0);
-    }
+    setZoom((currentZoom) => {
+      return Math.max(
+        currentZoom - ZOOM_STEP,
+        MIN_ZOOM
+      );
+    });
   };
 
   const resetZoom = () => {
-    scale.value = withSpring(1);
-
-    translateX.value = withSpring(0);
-
-    translateY.value = withSpring(0);
+    setZoom(MIN_ZOOM);
   };
-
-  /*
-  |--------------------------------------------------------------------------
-  | NODE PRESS
-  |--------------------------------------------------------------------------
-  */
 
   const handleNodePress = (node) => {
     if (node.status === 'locked') {
       return;
     }
 
-    console.log('Opening lesson:', node.lesson);
+    console.log('[Home] Opening lesson:', node.lesson);
   };
-
-  const roadPath = generateRoadPath();
 
   return (
     <SafeAreaView
@@ -355,47 +201,46 @@ export default function Home() {
       <View style={styles.container}>
 
         {/* =========================================================
-            MAP AREA
+            MAP
         ========================================================= */}
 
-        <GestureDetector gesture={mapGesture}>
-
-          <View style={styles.mapGestureArea}>
-
-            <Animated.ScrollView
-              showsVerticalScrollIndicator={false}
-              bounces={true}
-              scrollEventThrottle={16}
-              contentContainerStyle={[
-                styles.scrollContent,
+        <View style={styles.mapArea}>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[
+              styles.scrollContent,
+              {
+                paddingBottom:
+                  220 + insets.bottom,
+              },
+            ]}
+            showsVerticalScrollIndicator={false}
+            bounces={true}
+            nestedScrollEnabled={true}
+          >
+            <View
+              style={[
+                styles.mapScaleContainer,
                 {
-                  paddingBottom:
-                    200 + insets.bottom,
+                  height:
+                    MAP_HEIGHT * zoom,
                 },
               ]}
-              onScroll={Animated.event(
-                [
-                  {
-                    nativeEvent: {
-                      contentOffset: {
-                        y: scrollY,
-                      },
-                    },
-                  },
-                ],
-                {
-                  useNativeDriver: true,
-                }
-              )}
             >
-
-              <Animated.View
+              <View
                 style={[
-                  styles.zoomLayer,
-                  mapAnimatedStyle,
+                  styles.mapZoomLayer,
+                  {
+                    width: SCREEN_WIDTH,
+                    height: MAP_HEIGHT,
+                    transform: [
+                      {
+                        scale: zoom,
+                      },
+                    ],
+                  },
                 ]}
               >
-
                 <ImageBackground
                   source={require('../../../assets/images/background/background.png')}
                   style={[
@@ -415,14 +260,10 @@ export default function Home() {
                     pointerEvents="none"
                     style={StyleSheet.absoluteFill}
                   >
-
                     <Svg
                       width={SCREEN_WIDTH}
                       height={MAP_HEIGHT}
                     >
-
-                      {/* ROAD SHADOW */}
-
                       <Path
                         d={roadPath}
                         fill="none"
@@ -431,8 +272,6 @@ export default function Home() {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
-
-                      {/* ROAD */}
 
                       <Path
                         d={roadPath}
@@ -443,8 +282,6 @@ export default function Home() {
                         strokeLinejoin="round"
                       />
 
-                      {/* ROAD CENTER */}
-
                       <Path
                         d={roadPath}
                         fill="none"
@@ -453,60 +290,24 @@ export default function Home() {
                         strokeDasharray="22 18"
                         strokeLinecap="round"
                       />
-
                     </Svg>
-
                   </View>
 
                   {/* =================================================
-                      NODES
+                      JOURNEY NODES
                   ================================================= */}
 
                   {NODES.map((node) => {
-
                     const nodeX = getNodeX(node);
 
-                    const nodeScale =
-                      scrollY.interpolate({
-
-                        inputRange: [
-                          node.top - SCREEN_HEIGHT,
-
-                          node.top -
-                            SCREEN_HEIGHT * 0.55,
-
-                          node.top,
-
-                          node.top + 250,
-                        ],
-
-                        outputRange: [
-                          0.75,
-                          1.08,
-                          1,
-                          0.92,
-                        ],
-
-                        extrapolate: 'clamp',
-                      });
-
                     return (
-                      <Animated.View
+                      <View
                         key={node.id}
                         style={[
                           styles.nodeWrapper,
-
                           {
                             top: node.top,
-
                             left: nodeX - 80,
-
-                            transform: [
-                              {
-                                scale:
-                                  nodeScale,
-                              },
-                            ],
                           },
                         ]}
                       >
@@ -518,48 +319,38 @@ export default function Home() {
                         <View
                           style={[
                             styles.lessonCard,
-
                             node.status === 'current' &&
                               styles.lessonCardCurrent,
                           ]}
                         >
-
                           {node.status !== 'locked' && (
                             <Text
                               style={[
                                 styles.statusText,
-
-                                node.status ===
-                                'current'
+                                node.status === 'current'
                                   ? styles.currentText
                                   : styles.completedText,
                               ]}
                             >
-                              {node.status ===
-                              'current'
+                              {node.status === 'current'
                                 ? 'CURRENT'
                                 : 'COMPLETED'}
                             </Text>
                           )}
 
                           <Text
-                            style={
-                              styles.lessonTitle
-                            }
+                            style={styles.lessonTitle}
                             numberOfLines={1}
                           >
                             {node.title}
                           </Text>
 
                           <Text
-                            style={
-                              styles.lessonDescription
-                            }
+                            style={styles.lessonDescription}
                             numberOfLines={1}
                           >
                             {node.desc}
                           </Text>
-
                         </View>
 
                         {/* =================================================
@@ -567,85 +358,47 @@ export default function Home() {
                         ================================================= */}
 
                         <Pressable
-                          onPress={() =>
-                            handleNodePress(node)
-                          }
-                          disabled={
-                            node.status ===
-                            'locked'
-                          }
-                          style={({
-                            pressed,
-                          }) => [
-
+                          onPress={() => handleNodePress(node)}
+                          disabled={node.status === 'locked'}
+                          style={({ pressed }) => [
                             styles.nodeButton,
 
-                            node.status ===
-                            'completed' &&
+                            node.status === 'completed' &&
                               styles.nodeCompleted,
 
-                            node.status ===
-                            'current' &&
+                            node.status === 'current' &&
                               styles.nodeCurrent,
 
-                            node.status ===
-                            'locked' &&
+                            node.status === 'locked' &&
                               styles.nodeLocked,
 
                             pressed &&
-                              node.status !==
-                              'locked' &&
+                              node.status !== 'locked' &&
                               styles.nodePressed,
                           ]}
                         >
-
-                          {node.status ===
-                          'locked' ? (
-
-                            <Text
-                              style={
-                                styles.lockIcon
-                              }
-                            >
+                          {node.status === 'locked' ? (
+                            <Text style={styles.lockIcon}>
                               🔒
                             </Text>
-
                           ) : (
-
-                            <Text
-                              style={
-                                styles.nodeNumber
-                              }
-                            >
+                            <Text style={styles.nodeNumber}>
                               {node.id}
                             </Text>
-
                           )}
 
-                          {node.status ===
-                            'current' && (
-                            <View
-                              style={
-                                styles.currentDot
-                              }
-                            />
+                          {node.status === 'current' && (
+                            <View style={styles.currentDot} />
                           )}
-
                         </Pressable>
-
-                      </Animated.View>
+                      </View>
                     );
                   })}
-
                 </ImageBackground>
-
-              </Animated.View>
-
-            </Animated.ScrollView>
-
-          </View>
-
-        </GestureDetector>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
 
         {/* =========================================================
             ZOOM CONTROLS
@@ -657,8 +410,7 @@ export default function Home() {
             onPress={zoomIn}
             style={({ pressed }) => [
               styles.zoomButton,
-              pressed &&
-                styles.zoomButtonPressed,
+              pressed && styles.zoomButtonPressed,
             ]}
           >
             <Text style={styles.zoomText}>
@@ -670,8 +422,7 @@ export default function Home() {
             onPress={resetZoom}
             style={({ pressed }) => [
               styles.zoomButton,
-              pressed &&
-                styles.zoomButtonPressed,
+              pressed && styles.zoomButtonPressed,
             ]}
           >
             <Text style={styles.resetText}>
@@ -683,8 +434,7 @@ export default function Home() {
             onPress={zoomOut}
             style={({ pressed }) => [
               styles.zoomButton,
-              pressed &&
-                styles.zoomButtonPressed,
+              pressed && styles.zoomButtonPressed,
             ]}
           >
             <Text style={styles.zoomText}>
@@ -702,26 +452,19 @@ export default function Home() {
           style={[
             styles.topHud,
             {
-              top: Math.max(
-                insets.top,
-                8
-              ),
+              top: Math.max(insets.top, 8),
             },
           ]}
         >
-
           <View style={styles.profileArea}>
 
             <View style={styles.avatar}>
-
               <Text style={styles.avatarText}>
                 👦🏽
               </Text>
-
             </View>
 
             <View style={styles.profileText}>
-
               <Text style={styles.greeting}>
                 Bonjour,
               </Text>
@@ -732,7 +475,6 @@ export default function Home() {
               >
                 {PLAYER.name}
               </Text>
-
             </View>
 
           </View>
@@ -761,7 +503,6 @@ export default function Home() {
             />
 
           </View>
-
         </View>
 
         {/* =========================================================
@@ -772,9 +513,7 @@ export default function Home() {
           style={[
             styles.progressPanel,
             {
-              top:
-                100 +
-                insets.top,
+              top: 100 + insets.top,
             },
           ]}
         >
@@ -789,12 +528,7 @@ export default function Home() {
               Complete 1 lesson
             </Text>
 
-            <View
-              style={
-                styles.progressBackground
-              }
-            >
-
+            <View style={styles.progressBackground}>
               <View
                 style={[
                   styles.progressFill,
@@ -803,12 +537,9 @@ export default function Home() {
                   },
                 ]}
               />
-
             </View>
 
-            <Text
-              style={styles.completedGoal}
-            >
+            <Text style={styles.completedGoal}>
               ✓ Complete
             </Text>
 
@@ -820,12 +551,7 @@ export default function Home() {
               🗺️ Journey
             </Text>
 
-            <View
-              style={
-                styles.progressBackground
-              }
-            >
-
+            <View style={styles.progressBackground}>
               <View
                 style={[
                   styles.progressFillBlue,
@@ -834,14 +560,9 @@ export default function Home() {
                   },
                 ]}
               />
-
             </View>
 
-            <Text
-              style={
-                styles.progressPercentage
-              }
-            >
+            <Text style={styles.progressPercentage}>
               30%
             </Text>
 
@@ -857,43 +578,26 @@ export default function Home() {
           style={[
             styles.continueContainer,
             {
-              bottom:
-                16 +
-                insets.bottom,
+              bottom: 16 + insets.bottom,
             },
           ]}
         >
+          <View style={styles.continueCard}>
 
-          <View
-            style={styles.continueCard}
-          >
+            <View style={styles.continueInfo}>
 
-            <View
-              style={styles.continueInfo}
-            >
-
-              <Text
-                style={
-                  styles.continueLabel
-                }
-              >
+              <Text style={styles.continueLabel}>
                 CONTINUE LEARNING
               </Text>
 
               <Text
-                style={
-                  styles.continueTitle
-                }
+                style={styles.continueTitle}
                 numberOfLines={1}
               >
                 Green Forest
               </Text>
 
-              <Text
-                style={
-                  styles.continueMeta
-                }
-              >
+              <Text style={styles.continueMeta}>
                 Module 1 • Lesson 3 / 5
               </Text>
 
@@ -901,38 +605,23 @@ export default function Home() {
 
             <Pressable
               onPress={() =>
-                console.log(
-                  'Continue Learning'
-                )
+                console.log('[Home] Continue Learning')
               }
               style={({ pressed }) => [
                 styles.continueButton,
-
-                pressed &&
-                  styles.buttonPressed,
+                pressed && styles.buttonPressed,
               ]}
             >
-
-              <Text
-                style={
-                  styles.continueButtonText
-                }
-              >
+              <Text style={styles.continueButtonText}>
                 ▶
               </Text>
 
-              <Text
-                style={
-                  styles.continueButtonLabel
-                }
-              >
+              <Text style={styles.continueButtonLabel}>
                 Continue
               </Text>
-
             </Pressable>
 
           </View>
-
         </View>
 
       </View>
@@ -946,11 +635,7 @@ export default function Home() {
 |--------------------------------------------------------------------------
 */
 
-function Stat({
-  icon,
-  value,
-  sub,
-}) {
+function Stat({ icon, value, sub }) {
   return (
     <View style={styles.stat}>
 
@@ -959,17 +644,15 @@ function Stat({
       </Text>
 
       <View>
-
         <Text style={styles.statValue}>
           {value}
         </Text>
 
-        {sub && (
+        {sub ? (
           <Text style={styles.statSub}>
             {sub}
           </Text>
-        )}
-
+        ) : null}
       </View>
 
     </View>
@@ -986,8 +669,7 @@ const styles = StyleSheet.create({
 
   safeArea: {
     flex: 1,
-    backgroundColor:
-      COLORS.background,
+    backgroundColor: COLORS.background,
   },
 
   container: {
@@ -995,7 +677,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  mapGestureArea: {
+  mapArea: {
+    flex: 1,
+  },
+
+  scrollView: {
     flex: 1,
   },
 
@@ -1003,8 +689,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
-  zoomLayer: {
-    transformOrigin: 'center',
+  mapScaleContainer: {
+    width: SCREEN_WIDTH,
+    position: 'relative',
+  },
+
+  mapZoomLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
 
   mapBackground: {
@@ -1019,16 +712,12 @@ const styles = StyleSheet.create({
 
   zoomControls: {
     position: 'absolute',
-
     right: 12,
-
     top: SCREEN_HEIGHT * 0.42,
 
-    backgroundColor:
-      'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(255,255,255,0.95)',
 
     borderRadius: 16,
-
     overflow: 'hidden',
 
     shadowColor: '#000',
@@ -1039,7 +728,6 @@ const styles = StyleSheet.create({
     },
 
     shadowOpacity: 0.18,
-
     shadowRadius: 7,
 
     elevation: 7,
@@ -1047,15 +735,12 @@ const styles = StyleSheet.create({
 
   zoomButton: {
     width: 44,
-
     height: 44,
 
     alignItems: 'center',
-
     justifyContent: 'center',
 
     borderBottomWidth: 1,
-
     borderBottomColor: '#E5E7EB',
   },
 
@@ -1065,19 +750,14 @@ const styles = StyleSheet.create({
 
   zoomText: {
     color: COLORS.dark,
-
     fontSize: 28,
-
     fontWeight: '700',
-
     lineHeight: 30,
   },
 
   resetText: {
     color: COLORS.blueDark,
-
     fontSize: 18,
-
     fontWeight: '900',
   },
 
@@ -1089,24 +769,17 @@ const styles = StyleSheet.create({
 
   nodeWrapper: {
     position: 'absolute',
-
     width: 160,
-
     alignItems: 'center',
   },
 
   lessonCard: {
-    minWidth:
-      isSmallScreen ? 115 : 135,
+    minWidth: isSmallScreen ? 115 : 135,
+    maxWidth: isSmallScreen ? 145 : 170,
 
-    maxWidth:
-      isSmallScreen ? 145 : 170,
-
-    backgroundColor:
-      'rgba(255,255,255,0.96)',
+    backgroundColor: 'rgba(255,255,255,0.96)',
 
     paddingHorizontal: 10,
-
     paddingVertical: 8,
 
     borderRadius: 14,
@@ -1123,7 +796,6 @@ const styles = StyleSheet.create({
     },
 
     shadowOpacity: 0.16,
-
     shadowRadius: 5,
 
     elevation: 5,
@@ -1131,17 +803,13 @@ const styles = StyleSheet.create({
 
   lessonCardCurrent: {
     borderWidth: 2,
-
     borderColor: COLORS.blue,
   },
 
   statusText: {
     fontSize: 8,
-
     fontWeight: '900',
-
     letterSpacing: 0.6,
-
     marginBottom: 2,
   },
 
@@ -1156,19 +824,16 @@ const styles = StyleSheet.create({
   lessonTitle: {
     color: COLORS.dark,
 
-    fontSize:
-      isSmallScreen ? 12 : 14,
+    fontSize: isSmallScreen ? 12 : 14,
 
     fontWeight: '900',
-
     textAlign: 'center',
   },
 
   lessonDescription: {
     color: COLORS.muted,
 
-    fontSize:
-      isSmallScreen ? 9 : 10,
+    fontSize: isSmallScreen ? 9 : 10,
 
     fontWeight: '600',
 
@@ -1179,18 +844,14 @@ const styles = StyleSheet.create({
 
   nodeButton: {
     width: NODE_SIZE,
-
     height: NODE_SIZE,
 
-    borderRadius:
-      NODE_SIZE / 2,
+    borderRadius: NODE_SIZE / 2,
 
     alignItems: 'center',
-
     justifyContent: 'center',
 
     borderWidth: 4,
-
     borderBottomWidth: 9,
 
     shadowColor: '#000',
@@ -1201,82 +862,60 @@ const styles = StyleSheet.create({
     },
 
     shadowOpacity: 0.22,
-
     shadowRadius: 5,
 
     elevation: 7,
   },
 
   nodeCompleted: {
-    backgroundColor:
-      COLORS.green,
-
-    borderColor:
-      COLORS.greenDark,
+    backgroundColor: COLORS.green,
+    borderColor: COLORS.greenDark,
   },
 
   nodeCurrent: {
-    backgroundColor:
-      COLORS.blue,
-
-    borderColor:
-      COLORS.blueDark,
+    backgroundColor: COLORS.blue,
+    borderColor: COLORS.blueDark,
 
     borderWidth: 5,
-
     borderBottomWidth: 10,
   },
 
   nodeLocked: {
-    backgroundColor:
-      COLORS.gray,
-
-    borderColor:
-      COLORS.grayDark,
+    backgroundColor: COLORS.gray,
+    borderColor: COLORS.grayDark,
   },
 
   nodePressed: {
-    transform: [
-      {
-        scale: 0.92,
-      },
-    ],
+    opacity: 0.85,
   },
 
   nodeNumber: {
     color: COLORS.white,
 
-    fontSize:
-      isSmallScreen ? 24 : 28,
+    fontSize: isSmallScreen ? 24 : 28,
 
     fontWeight: '900',
   },
 
   lockIcon: {
-    fontSize:
-      isSmallScreen ? 20 : 25,
+    fontSize: isSmallScreen ? 20 : 25,
   },
 
   currentDot: {
     position: 'absolute',
 
     top: -5,
-
     right: 0,
 
     width: 15,
-
     height: 15,
 
     borderRadius: 8,
 
-    backgroundColor:
-      COLORS.yellow,
+    backgroundColor: COLORS.yellow,
 
     borderWidth: 2,
-
-    borderColor:
-      COLORS.white,
+    borderColor: COLORS.white,
   },
 
   /*
@@ -1289,24 +928,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
 
     left: 10,
-
     right: 10,
 
-    backgroundColor:
-      'rgba(255,255,255,0.97)',
+    backgroundColor: 'rgba(255,255,255,0.97)',
 
     borderRadius: 20,
 
     paddingHorizontal: 10,
-
     paddingVertical: 9,
 
     flexDirection: 'row',
 
     alignItems: 'center',
-
-    justifyContent:
-      'space-between',
+    justifyContent: 'space-between',
 
     shadowColor: '#000',
 
@@ -1316,7 +950,6 @@ const styles = StyleSheet.create({
     },
 
     shadowOpacity: 0.15,
-
     shadowRadius: 8,
 
     elevation: 8,
@@ -1333,93 +966,69 @@ const styles = StyleSheet.create({
   },
 
   avatar: {
-    width:
-      isSmallScreen ? 38 : 46,
-
-    height:
-      isSmallScreen ? 38 : 46,
+    width: isSmallScreen ? 38 : 46,
+    height: isSmallScreen ? 38 : 46,
 
     borderRadius: 25,
 
-    backgroundColor:
-      '#DBEAFE',
+    backgroundColor: '#DBEAFE',
 
     alignItems: 'center',
-
     justifyContent: 'center',
 
     borderWidth: 2,
-
-    borderColor:
-      COLORS.blue,
+    borderColor: COLORS.blue,
   },
 
   avatarText: {
-    fontSize:
-      isSmallScreen ? 19 : 23,
+    fontSize: isSmallScreen ? 19 : 23,
   },
 
   profileText: {
     marginLeft: 7,
-
     flexShrink: 1,
   },
 
   greeting: {
     fontSize: 10,
-
     color: COLORS.muted,
-
     fontWeight: '600',
   },
 
   playerName: {
-    fontSize:
-      isSmallScreen ? 13 : 16,
-
+    fontSize: isSmallScreen ? 13 : 16,
     color: COLORS.dark,
-
     fontWeight: '900',
   },
 
   statsArea: {
     flexDirection: 'row',
-
     alignItems: 'center',
 
-    gap:
-      isSmallScreen ? 5 : 10,
+    gap: isSmallScreen ? 5 : 10,
 
     flexShrink: 0,
   },
 
   stat: {
     flexDirection: 'row',
-
     alignItems: 'center',
   },
 
   statIcon: {
-    fontSize:
-      isSmallScreen ? 14 : 17,
-
+    fontSize: isSmallScreen ? 14 : 17,
     marginRight: 2,
   },
 
   statValue: {
     color: COLORS.dark,
-
-    fontSize:
-      isSmallScreen ? 11 : 13,
-
+    fontSize: isSmallScreen ? 11 : 13,
     fontWeight: '900',
   },
 
   statSub: {
     color: COLORS.muted,
-
     fontSize: 7,
-
     fontWeight: '700',
   },
 
@@ -1431,18 +1040,14 @@ const styles = StyleSheet.create({
 
   progressPanel: {
     position: 'absolute',
-
     left: 10,
-
     gap: 8,
   },
 
   progressCard: {
-    width:
-      isSmallScreen ? 135 : 155,
+    width: isSmallScreen ? 135 : 155,
 
-    backgroundColor:
-      'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(255,255,255,0.95)',
 
     padding: 11,
 
@@ -1456,7 +1061,6 @@ const styles = StyleSheet.create({
     },
 
     shadowOpacity: 0.12,
-
     shadowRadius: 6,
 
     elevation: 5,
@@ -1465,8 +1069,7 @@ const styles = StyleSheet.create({
   cardHeading: {
     color: COLORS.dark,
 
-    fontSize:
-      isSmallScreen ? 11 : 12,
+    fontSize: isSmallScreen ? 11 : 12,
 
     fontWeight: '900',
 
@@ -1486,8 +1089,7 @@ const styles = StyleSheet.create({
   progressBackground: {
     height: 8,
 
-    backgroundColor:
-      '#E5E7EB',
+    backgroundColor: '#E5E7EB',
 
     borderRadius: 5,
 
@@ -1497,8 +1099,7 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
 
-    backgroundColor:
-      COLORS.green,
+    backgroundColor: COLORS.green,
 
     borderRadius: 5,
   },
@@ -1506,15 +1107,13 @@ const styles = StyleSheet.create({
   progressFillBlue: {
     height: '100%',
 
-    backgroundColor:
-      COLORS.blue,
+    backgroundColor: COLORS.blue,
 
     borderRadius: 5,
   },
 
   completedGoal: {
-    color:
-      COLORS.greenDark,
+    color: COLORS.greenDark,
 
     fontSize: 9,
 
@@ -1524,8 +1123,7 @@ const styles = StyleSheet.create({
   },
 
   progressPercentage: {
-    color:
-      COLORS.blueDark,
+    color: COLORS.blueDark,
 
     fontSize: 10,
 
@@ -1546,13 +1144,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
 
     left: 10,
-
     right: 10,
   },
 
   continueCard: {
-    backgroundColor:
-      'rgba(255,255,255,0.98)',
+    backgroundColor: 'rgba(255,255,255,0.98)',
 
     borderRadius: 20,
 
@@ -1561,14 +1157,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
 
     alignItems: 'center',
-
-    justifyContent:
-      'space-between',
+    justifyContent: 'space-between',
 
     borderWidth: 2,
-
-    borderColor:
-      COLORS.blueDark,
+    borderColor: COLORS.blueDark,
 
     shadowColor: '#000',
 
@@ -1578,7 +1170,6 @@ const styles = StyleSheet.create({
     },
 
     shadowOpacity: 0.2,
-
     shadowRadius: 10,
 
     elevation: 10,
@@ -1586,13 +1177,11 @@ const styles = StyleSheet.create({
 
   continueInfo: {
     flex: 1,
-
     marginRight: 10,
   },
 
   continueLabel: {
-    color:
-      COLORS.blueDark,
+    color: COLORS.blueDark,
 
     fontSize: 9,
 
@@ -1604,8 +1193,7 @@ const styles = StyleSheet.create({
   continueTitle: {
     color: COLORS.dark,
 
-    fontSize:
-      isSmallScreen ? 15 : 17,
+    fontSize: isSmallScreen ? 15 : 17,
 
     fontWeight: '900',
 
@@ -1623,14 +1211,11 @@ const styles = StyleSheet.create({
   },
 
   continueButton: {
-    backgroundColor:
-      '#65A30D',
+    backgroundColor: '#65A30D',
 
-    minWidth:
-      isSmallScreen ? 80 : 100,
+    minWidth: isSmallScreen ? 80 : 100,
 
     paddingVertical: 11,
-
     paddingHorizontal: 12,
 
     borderRadius: 14,
@@ -1638,9 +1223,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
 
     borderBottomWidth: 5,
-
-    borderColor:
-      '#4D7C0F',
+    borderColor: '#4D7C0F',
   },
 
   continueButtonText: {

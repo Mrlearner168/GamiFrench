@@ -2,12 +2,13 @@ import { useAuth } from '@/store/auth-context';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function Profile() {
   const [profile, setProfile] = useState(null);
@@ -64,6 +65,7 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Text style={styles.pageTitle}>Profile</Text>
         <Text style={styles.pageSubtitle}>
@@ -124,6 +126,7 @@ export default function Profile() {
           </View>
         </TouchableOpacity>
       ))}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -132,7 +135,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
+  },
+  content: {
     padding: 20,
+    paddingBottom: 36,
   },
   header: {
     marginBottom: 18,

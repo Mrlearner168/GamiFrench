@@ -21,8 +21,10 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 async function readSession() {
   try {
     const value = await SecureStore.getItemAsync(SESSION_KEY);
+    console.log('[Auth] stored session read', { hasValue: Boolean(value) });
     return value ? (JSON.parse(value) as AuthSession) : null;
-  } catch {
+  } catch (error) {
+    console.error('[Auth] failed to read stored session', error);
     return null;
   }
 }
@@ -34,7 +36,9 @@ async function writeSession(session: AuthSession | null) {
     } else {
       await SecureStore.deleteItemAsync(SESSION_KEY);
     }
-  } catch {
+    console.log('[Auth] stored session written', { hasSession: Boolean(session) });
+  } catch (error) {
+    console.error('[Auth] failed to write stored session', error);
     // Secure storage can be unavailable in web preview; the session remains in memory.
   }
 }
@@ -44,27 +48,38 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    console.log('[AuthProvider] loading stored session');
     readSession().then((storedSession) => {
       setSession(storedSession);
       setIsLoading(false);
+      console.log('[AuthProvider] session hydration complete', {
+        hasSession: Boolean(storedSession),
+      });
     });
   }, []);
 
   const signIn = async (credentials: AuthCredentials) => {
+    console.log('[AuthProvider] signIn started');
     const nextSession = await authService.login(credentials);
     await writeSession(nextSession);
     setSession(nextSession);
+    console.log('[DEBUG] nextSession:', JSON.stringify(nextSession, null, 2));
+    console.log('[AuthProvider] signIn complete');
   };
 
   const signUp = async (input: RegistrationInput) => {
+    console.log('[AuthProvider] signUp started');
     const nextSession = await authService.register(input);
     await writeSession(nextSession);
     setSession(nextSession);
+    console.log('[AuthProvider] signUp complete');
   };
 
   const signOut = async () => {
+    console.log('[AuthProvider] signOut started');
     await writeSession(null);
     setSession(null);
+    console.log('[AuthProvider] signOut complete');
   };
 
   const authenticatedRequest = async <T,>(path: string, options: RequestInit = {}) => {
