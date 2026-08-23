@@ -43,7 +43,6 @@ export default function Login() {
         setServerError('');
         try {
             await signIn(values);
-            router.replace('/(game)/home');
         } catch (error) {
             setServerError(error instanceof AuthServiceError ? error.message : 'Unable to sign in right now. Please try again.');
         }

@@ -22,10 +22,11 @@ export default function AuthLayout() {
     // If still loading or there is NO session, stay on the Auth screens
     if (isLoading || !session) return;
 
-    // If we have a session, safely redirect to the game
+    const destination = session.user.onboardingComplete === false ? '/welcome' : '/(game)/home';
+
     const redirectTimer = setTimeout(() => {
-      console.log('[AuthLayout] redirecting to home');
-      router.replace('/(game)/home');
+      console.log('[AuthLayout] redirecting to', destination);
+      router.replace(destination);
     }, 0);
 
     return () => {

@@ -58,7 +58,6 @@ export default function Register() {
         setServerError('');
         try {
             await signUp(values);
-            router.replace('/(game)/home');
         } catch (error) {
             setServerError(
                 error instanceof AuthServiceError 

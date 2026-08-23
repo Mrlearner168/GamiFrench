@@ -5,5 +5,12 @@ import { useAuth } from '@/store/auth-context';
 export default function Index() {
   const { session, isLoading } = useAuth();
   if (isLoading) return null;
-  return <Redirect href={session ? '/(game)/home' : '/(auth)/login'} />;
+
+  const destination = session
+    ? session.user.onboardingComplete === false
+      ? '/welcome'
+      : '/(game)/home'
+    : '/(auth)/login';
+
+  return <Redirect href={destination} />;
 }
