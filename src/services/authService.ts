@@ -15,6 +15,11 @@ async function authRequest<T>(path: string, options: RequestInit) {
   try {
     return await apiRequest<T>(path, options);
   } catch (error) {
+    console.error('[AuthService] request failed', {
+      path,
+      status: error instanceof ApiError ? error.status : undefined,
+      error,
+    });
     if (error instanceof AuthServiceError) throw error;
     if (error instanceof ApiError) throw new AuthServiceError(error.message, error.status);
     throw new AuthServiceError('Check your connection and try again.');

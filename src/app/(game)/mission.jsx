@@ -3,16 +3,33 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GameHeader, PrimaryButton, StatPill } from '@/components/game-ui';
+import { missionCatalog } from '@/data/missions';
 
 export default function Mission() {
-  const { id, title, challenge } = useLocalSearchParams();
+  const { missionId } = useLocalSearchParams();
+  const missionKey = Array.isArray(missionId) ? missionId[0] : missionId;
+  const mission = missionCatalog.find((item) => String(item.id) === String(missionKey));
+  const { id, title, challenge, country, module: moduleId, topicId } = mission || {};
 
   const startMission = () => {
+    if (!mission) return;
+
     router.push({
       pathname: '/lesson',
-      params: { id, title, challenge },
+      params: { country, module: moduleId, topicId },
     });
   };
+
+  if (!mission) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <GameHeader back eyebrow="MISSION BRIEF" title="Mission not found" subtitle="Return to your journey to choose an available mission." />
+          <PrimaryButton onPress={() => router.replace('/journey')}>Return to journey</PrimaryButton>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -20,6 +37,7 @@ export default function Mission() {
         <View style={styles.topBar}>
           <StatPill icon="⭐" value="1,280" label="XP" />
           <StatPill icon="🔥" value="4" label="day streak" />
+          <StatPill icon="❤️" value="5" label="hearts" />
         </View>
 
         <GameHeader
@@ -29,9 +47,15 @@ export default function Mission() {
           subtitle="A short lesson, a useful phrase, and a reward waiting for you."
         />
 
-        <View style={styles.card}>
-          <Text style={styles.mission}>MISSION {String(id || '').padStart(2, '0')}</Text>
+        <View style={[styles.card, challenge && styles.challengeCard]}>
+          <View style={styles.headerRow}>
+            <Text style={styles.mission}>MISSION {String(id || '').padStart(2, '0')}</Text>
+            <View style={styles.statusBadge}>
+              <Text style={styles.status}>Current</Text>
+            </View>
+          </View>
           <Text style={styles.cardTitle}>{title || 'Your next mission'}</Text>
+          <Text style={styles.cardMeta}>Ready for your next French lesson</Text>
 
           <View style={styles.infoContainer}>
             <Text style={styles.label}>Stage</Text>
@@ -45,10 +69,10 @@ export default function Mission() {
             <Text style={styles.reward}>+50 coins</Text>
           </View>
 
-          {challenge === 'true' ? (
-            <View style={styles.challengeBox}>
+          {challenge ? (
+            <View style={styles.challengeRow}>
               <Text style={styles.challengeTitle}>STAGE CHALLENGE</Text>
-              <Text style={styles.challengeText}>Complete this challenge to unlock the next stage.</Text>
+              <Text style={styles.challengeReward}>+250 XP</Text>
             </View>
           ) : null}
         </View>
@@ -65,8 +89,8 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: 'row', gap: 8, paddingTop: 10 },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 18,
+    padding: 18,
     borderWidth: 1,
     borderColor: '#E1E8F0',
     shadowColor: '#21344D',
@@ -75,13 +99,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 2,
   },
+  challengeCard: { backgroundColor: '#FFF9E8', borderColor: '#F2D48B' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   mission: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#667085' },
-  cardTitle: { marginTop: 14, fontSize: 24, lineHeight: 31, fontWeight: '800', color: '#182133' },
+  statusBadge: { backgroundColor: '#E7F1FB', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  status: { fontSize: 11, fontWeight: '800', color: '#1577D4' },
+  cardTitle: { marginTop: 14, fontSize: 20, lineHeight: 26, fontWeight: '800', color: '#182133' },
+  cardMeta: { marginTop: 5, color: '#7A8798', fontSize: 13, lineHeight: 19 },
   infoContainer: { gap: 8, marginTop: 18 },
   label: { fontSize: 13, color: '#7A8798', marginTop: 8 },
   value: { fontSize: 17, fontWeight: '700', color: '#1577D4' },
   reward: { fontSize: 17, color: '#16855A', fontWeight: '800' },
-  challengeBox: { marginTop: 18, backgroundColor: '#FFF4D8', padding: 15, borderRadius: 14 },
-  challengeTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#B36B00' },
-  challengeText: { marginTop: 8, color: '#8C5A0A', fontSize: 14, lineHeight: 20 },
+  challengeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F0DCA8' },
+  challengeTitle: { color: '#B36B00', fontWeight: '800', fontSize: 11, letterSpacing: 1 },
+  challengeReward: { color: '#B36B00', fontWeight: '800', fontSize: 12 },
 });

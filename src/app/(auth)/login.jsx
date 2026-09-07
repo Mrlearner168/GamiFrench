@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
     ActivityIndicator,
-    Image, // <--- ADDED MISSING IMPORT
+    Image, 
     Keyboard,
     KeyboardAvoidingView,
     Platform,

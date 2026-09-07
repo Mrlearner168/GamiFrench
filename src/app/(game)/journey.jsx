@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -9,50 +10,55 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GameHeader, ProgressBar, StatPill } from '@/components/game-ui';
-
-const missions = [
-  {
-    id: 1,
-    title: 'Greeting the Villagers',
-    status: 'completed',
-    challenge: false,
-  },
-  {
-    id: 2,
-    title: 'Counting Apples',
-    status: 'current',
-    challenge: false,
-  },
-  {
-    id: 3,
-    title: "The Painter's Colors",
-    status: 'locked',
-    challenge: false,
-  },
-  {
-    id: 4,
-    title: 'Meet the Animals',
-    status: 'locked',
-    challenge: false,
-  },
-  {
-    id: 5,
-    title: 'Village Challenge',
-    status: 'locked',
-    challenge: true,
-  },
-];
+import { getCountryTopics } from '@/data/lesson-catalog';
+import { missionCatalog } from '@/data/missions';
+import { getTopicProgress, loadLessonProgress } from '@/store/lesson-progress';
 
 export default function Journey() {
+  const [progress, setProgress] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    loadLessonProgress().then((storedProgress) => {
+      if (mounted) setProgress(storedProgress);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const topics = getCountryTopics('Canada', 'module-1');
+  const missions = missionCatalog.map((mission, index) => {
+    const topic = topics.find((item) => item.id === mission.topicId);
+    const topicProgress = getTopicProgress(progress, mission.country, topic);
+    const completed = topicProgress.total > 0 && topicProgress.count === topicProgress.total;
+    const previousMission = index > 0 ? missionCatalog[index - 1] : null;
+    const previousTopic = previousMission
+      ? topics.find((item) => item.id === previousMission.topicId)
+      : null;
+    const previousProgress = getTopicProgress(progress, mission.country, previousTopic);
+    const unlocked = index === 0 || (
+      previousProgress.total > 0 && previousProgress.count === previousProgress.total
+    );
+
+    return {
+      ...mission,
+      status: completed ? 'completed' : unlocked ? 'current' : 'locked',
+      progress: topicProgress,
+    };
+  });
+
+  const completedMissions = missions.filter((mission) => mission.status === 'completed').length;
+
   const openMission = (mission) => {
     if (mission.status === 'locked') return;
 
     router.push({
       pathname: '/mission',
       params: {
-        id: mission.id,
-        title: mission.title,
-        challenge: mission.challenge,
+        missionId: String(mission.id),
       },
     });
   };
@@ -83,6 +89,9 @@ export default function Journey() {
 
         <Text style={styles.title}>{item.title}</Text>
         <Text style={styles.cardMeta}>{item.status === 'locked' ? 'Complete the previous mission to unlock' : item.status === 'current' ? 'Ready for your next French lesson' : 'Lesson complete - review anytime'}</Text>
+        <Text style={styles.lessonProgress}>
+          {item.progress.count}/{item.progress.total} sub-lessons complete
+        </Text>
 
         {item.challenge && (
           <View style={styles.challengeRow}><Text style={styles.challenge}>STAGE CHALLENGE</Text><Text style={styles.challengeReward}>+250 XP</Text></View>
@@ -100,8 +109,11 @@ export default function Journey() {
       </View>
       <GameHeader eyebrow="STAGE 01  /  THE VILLAGE" title="Your journey" subtitle="Complete each mission to unlock the next part of the story." />
       <View style={styles.progressSection}>
-        <View style={styles.progressLabels}><Text style={styles.progressTitle}>Stage progress</Text><Text style={styles.progressValue}>2 / 5 missions</Text></View>
-        <ProgressBar value={0.4} />
+        <View style={styles.progressLabels}>
+          <Text style={styles.progressTitle}>Stage progress</Text>
+          <Text style={styles.progressValue}>{completedMissions} / {missions.length} missions</Text>
+        </View>
+        <ProgressBar value={missions.length ? completedMissions / missions.length : 0} />
       </View>
 
       <FlatList
@@ -174,6 +186,7 @@ const styles = StyleSheet.create({
     color: '#182133',
   },
   cardMeta: { marginTop: 5, color: '#7A8798', fontSize: 13, lineHeight: 19 },
+  lessonProgress: { marginTop: 10, color: '#1577D4', fontSize: 12, fontWeight: '700' },
   challengeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F0DCA8' },
   challenge: { color: '#B36B00', fontWeight: '800', fontSize: 11, letterSpacing: 1 },
   challengeReward: { color: '#B36B00', fontWeight: '800', fontSize: 12 },

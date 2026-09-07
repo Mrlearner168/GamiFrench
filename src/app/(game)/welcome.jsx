@@ -7,19 +7,19 @@ import { useAuth } from '@/store/auth-context';
 const JOURNEY_STAGES = [
   {
     id: 1,
-    title: 'The Village',
+    title: 'Lesson A0',
     subtitle: 'Learn greetings, basic phrases, and meet your first villagers.',
     icon: '🏡',
   },
   {
     id: 2,
-    title: 'The Orchard',
+    title: 'Lesson A1',
     subtitle: 'Practice numbers, colors, and everyday vocabulary.',
     icon: '🍎',
   },
   {
     id: 3,
-    title: 'The Castle',
+    title: 'Lesson A2',
     subtitle: 'Unlock new grammar missions and strengthen your skills.',
     icon: '🏰',
   },

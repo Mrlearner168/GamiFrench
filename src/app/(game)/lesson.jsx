@@ -1,238 +1,102 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { useEffect, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { lessons } from '../../data/lessons';
+import { GameHeader, ProgressBar } from '@/components/game-ui';
+import { getCountryTopics, getDefaultModuleId, getModuleLabel } from '@/data/lesson-catalog';
+import { getTopicProgress, loadLessonProgress } from '@/store/lesson-progress';
 
-export default function Lesson() {
-  const { id } = useLocalSearchParams();
+const countryImages = {
+  Canada: require('../../../assets/images/countries/canada.jpg'),
+  France: require('../../../assets/images/countries/france.jpg'),
+  Morocco: require('../../../assets/images/countries/morocco.jpg'),
+  Italy: require('../../../assets/images/countries/italy.jpg'),
+  IvoryCoast: require('../../../assets/images/countries/ivory_coast.jpg'),
+  Luxembourg: require('../../../assets/images/countries/luxembourg.jpg'),
+  Monaco: require('../../../assets/images/countries/monaco.jpg'),
+  Switzerland: require('../../../assets/images/countries/switzerland.jpg'),
+  Belgium: require('../../../assets/images/countries/belgium.jpg'),
+  Cameroon: require('../../../assets/images/countries/cameroon.jpg'),
+};
 
-  const lesson = lessons[id];
+export default function CountryLessonScreen() {
+  const { country = 'Canada', module: moduleParam, topicId } = useLocalSearchParams();
+  const countryName = Array.isArray(country) ? country[0] : country;
+  const moduleId = Array.isArray(moduleParam) ? moduleParam[0] : moduleParam || getDefaultModuleId(countryName);
+  const catalogTopics = getCountryTopics(countryName, moduleId);
+  const topics = topicId
+    ? catalogTopics.filter((topic) => topic.id === (Array.isArray(topicId) ? topicId[0] : topicId))
+    : catalogTopics;
+  const [progress, setProgress] = useState({});
 
-  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    loadLessonProgress().then(setProgress);
+  }, []);
 
-  if (!lesson) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.error}>Lesson not found.</Text>
-      </SafeAreaView>
-    );
-  }
-
-  const word = lesson.vocabulary[index];
-
-  const nextCard = () => {
-    if (index < lesson.vocabulary.length - 1) {
-      setIndex(index + 1);
-      return;
-    }
+  const openTopic = (lesson) => {
+    const completed = getTopicProgress(progress, countryName, lesson).completed;
+    const subLessons = Array.isArray(lesson?.subLessons) ? lesson.subLessons : [];
+    const firstSubLesson = subLessons[0];
+    const firstLessonCompleted = !firstSubLesson || completed.includes(firstSubLesson.id);
+    const nextIndex = subLessons.findIndex((subLesson) => !completed.includes(subLesson.id));
 
     router.push({
-      pathname: '/quiz',
+      pathname: '/sublesson',
       params: {
-        id,
+        country: countryName,
+        module: moduleId,
+        topicId: lesson.id,
+        subLessonIndex: firstLessonCompleted && nextIndex >= 0 ? nextIndex : 0,
       },
     });
-  };
-
-  const previousCard = () => {
-    if (index > 0) {
-      setIndex(index - 1);
-    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-
-      <Text style={styles.stage}>
-        {lesson.stage}
-      </Text>
-
-      <Text style={styles.title}>
-        {lesson.title}
-      </Text>
-
-      <Text style={styles.goal}>
-        {lesson.goal}
-      </Text>
-
-      <View style={styles.progressContainer}>
-        <Text style={styles.progress}>
-          {index + 1} / {lesson.vocabulary.length}
-        </Text>
-      </View>
-
-      <View style={styles.card}>
-
-        <Text style={styles.french}>
-          {word.french}
-        </Text>
-
-        <Text style={styles.english}>
-          {word.english}
-        </Text>
-
-        <Text style={styles.label}>
-          Pronunciation
-        </Text>
-
-        <Text style={styles.value}>
-          {word.pronunciation}
-        </Text>
-
-        <Text style={styles.label}>
-          Example
-        </Text>
-
-        <Text style={styles.value}>
-          {word.example}
-        </Text>
-
-      </View>
-
-      <View style={styles.buttonRow}>
-
-        <TouchableOpacity
-          style={[
-            styles.button,
-            index === 0 && styles.disabledButton,
-          ]}
-          disabled={index === 0}
-          onPress={previousCard}
-        >
-          <Text style={styles.buttonText}>
-            Previous
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={nextCard}
-        >
-          <Text style={styles.buttonText}>
-            {index === lesson.vocabulary.length - 1
-              ? 'Start Quiz'
-              : 'Next'}
-          </Text>
-        </TouchableOpacity>
-
-      </View>
+        <GameHeader back eyebrow={getModuleLabel(countryName, moduleId)} title={countryName} subtitle="Choose what you want to learn. Small steps add up!" />
+        {countryImages[countryName] ? <Image source={countryImages[countryName]} style={styles.countryImage} /> : null}
+        <Text style={styles.sectionTitle}>Your topics</Text>
+        {topics.map((lesson) => {
+          const topicProgress = getTopicProgress(progress, countryName, lesson);
+          const locked = false;
+          const status = topicProgress.count === topicProgress.total ? 'Completed' : topicProgress.count ? 'In progress' : 'Available';
+          return (
+            <Pressable key={lesson.id} disabled={locked} onPress={() => openTopic(lesson)}
+              accessibilityRole="button" accessibilityLabel={`${lesson.title}, ${status}`}
+              style={({ pressed }) => [styles.card, locked && styles.lockedCard, pressed && styles.pressed]}>
+              <Text style={styles.icon}>{lesson.icon}</Text>
+              <View style={styles.cardBody}>
+                <View style={styles.cardHeader}><Text style={styles.cardTitle}>{lesson.title}</Text><Text style={[styles.status, status === 'Completed' && styles.completed]}>{locked ? '🔒' : status}</Text></View>
+                <Text style={styles.description}>{lesson.description}</Text>
+                <View style={styles.progressRow}><Text style={styles.progressText}>{topicProgress.count}/{topicProgress.total} sub-lessons</Text><ProgressBar value={topicProgress.total ? topicProgress.count / topicProgress.total : 0} color={status === 'Completed' ? '#10B981' : '#1577D4'} /></View>
+              </View>
+            </Pressable>
+          );
+        })}
+        <Text style={styles.future}>A more complex topic will be added here in a future update.</Text>
       </ScrollView>
-
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 36,
-  },
-
-  stage: {
-    fontSize: 16,
-    color: '#666',
-  },
-
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1E3A8A',
-    marginTop: 5,
-  },
-
-  goal: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#555',
-  },
-
-  progressContainer: {
-    alignItems: 'center',
-    marginVertical: 15,
-  },
-
-  progress: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2563EB',
-  },
-
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 25,
-    elevation: 3,
-  },
-
-  french: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    color: '#1E3A8A',
-  },
-
-  english: {
-    fontSize: 24,
-    textAlign: 'center',
-    color: '#16A34A',
-    marginTop: 10,
-  },
-
-  label: {
-    marginTop: 25,
-    fontSize: 14,
-    color: '#777',
-    fontWeight: '600',
-  },
-
-  value: {
-    marginTop: 5,
-    fontSize: 18,
-    color: '#222',
-  },
-
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
-  },
-
-  button: {
-    flex: 0.47,
-    backgroundColor: '#2563EB',
-    paddingVertical: 15,
-    borderRadius: 15,
-    alignItems: 'center',
-  },
-
-  disabledButton: {
-    backgroundColor: '#BDBDBD',
-  },
-
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: 'bold',
-  },
-
-  error: {
-    fontSize: 22,
-    textAlign: 'center',
-    marginTop: 50,
-  },
-
+  container: { flex: 1, backgroundColor: '#F4F7FA' },
+  content: { paddingBottom: 36 },
+  countryImage: { height: 120, marginHorizontal: 20, borderRadius: 20, opacity: 0.9 },
+  sectionTitle: { marginHorizontal: 20, marginTop: 22, marginBottom: 10, color: '#344054', fontSize: 15, fontWeight: '800' },
+  card: { flexDirection: 'row', marginHorizontal: 20, marginBottom: 12, padding: 16, borderRadius: 18, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E1E8F0', shadowColor: '#21344D', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  lockedCard: { opacity: 0.5 },
+  pressed: { opacity: 0.75 },
+  icon: { fontSize: 28, marginRight: 12, marginTop: 2 },
+  cardBody: { flex: 1 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  cardTitle: { flex: 1, color: '#182133', fontSize: 16, lineHeight: 21, fontWeight: '800' },
+  status: { color: '#1577D4', fontSize: 11, fontWeight: '800' },
+  completed: { color: '#16855A' },
+  description: { marginTop: 5, color: '#7A8798', fontSize: 12, lineHeight: 17 },
+  progressRow: { marginTop: 12 },
+  progressText: { marginBottom: 5, color: '#667085', fontSize: 11, fontWeight: '700' },
+  future: { margin: 10, color: '#98A2B3', textAlign: 'center', fontSize: 12 },
 });

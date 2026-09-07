@@ -60,19 +60,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const signIn = async (credentials: AuthCredentials) => {
     console.log('[AuthProvider] signIn started');
-    const nextSession = await authService.login(credentials);
-    await writeSession(nextSession);
-    setSession(nextSession);
-    console.log('[DEBUG] nextSession:', JSON.stringify(nextSession, null, 2));
-    console.log('[AuthProvider] signIn complete');
+    try {
+      const nextSession = await authService.login(credentials);
+      await writeSession(nextSession);
+      setSession(nextSession);
+      console.log('[AuthProvider] signIn complete');
+    } catch (error) {
+      console.error('[AuthProvider] signIn failed', error);
+      throw error;
+    }
   };
 
   const signUp = async (input: RegistrationInput) => {
     console.log('[AuthProvider] signUp started');
-    const nextSession = await authService.register(input);
-    await writeSession(nextSession);
-    setSession(nextSession);
-    console.log('[AuthProvider] signUp complete');
+    try {
+      const nextSession = await authService.register(input);
+      await writeSession(nextSession);
+      setSession(nextSession);
+      console.log('[AuthProvider] signUp complete');
+    } catch (error) {
+      console.error('[AuthProvider] signUp failed', error);
+      throw error;
+    }
   };
 
   const signOut = async () => {
@@ -87,6 +96,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     try {
       return await apiRequest<T>(path, options, session.accessToken);
     } catch (error) {
+      console.error('[AuthProvider] authenticated request failed', {
+        path,
+        status: error instanceof ApiError ? error.status : undefined,
+        error,
+      });
       if (!(error instanceof ApiError) || error.status !== 401 || !session.refreshToken) throw error;
       try {
         const nextSession = await authService.refresh(session.refreshToken);
@@ -94,6 +108,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setSession(nextSession);
         return await apiRequest<T>(path, options, nextSession.accessToken);
       } catch (refreshError) {
+        console.error('[AuthProvider] token refresh failed', refreshError);
         await signOut();
         throw refreshError;
       }
