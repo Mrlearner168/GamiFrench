@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link, useRouter } from 'expo-router';
+import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -13,12 +13,13 @@ import {
     StyleSheet,
     Text,
     TextInput,
-    TouchableWithoutFeedback,
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
+import { PasswordVisibilityToggle } from '@/components/password-visibility-toggle';
+import { ServerWakeBanner } from '@/components/server-wake-banner';
 import { AuthServiceError } from '@/services/authService';
 import { useAuth } from '@/store/auth-context';
 
@@ -26,6 +27,7 @@ const schema = z.object({
     firstName: z.string().trim().min(1, 'First name is required.'),
     lastName: z.string().trim().min(1, 'Last name is required.'),
     username: z.string().trim().optional(),
+    gender: z.enum(['male', 'female'], { message: 'Select a gender.' }),
     email: z.string().trim().email('Enter a valid email address.'),
     password: z.string().min(8, 'Use at least 8 characters.'),
     confirmPassword: z.string(),
@@ -35,7 +37,6 @@ const schema = z.object({
 });
 
 export default function Register() {
-    const router = useRouter();
     const { signUp } = useAuth();
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -47,6 +48,7 @@ export default function Register() {
             firstName: '',
             lastName: '',
             username: '',
+            gender: 'male',
             email: '',
             password: '',
             confirmPassword: '',
@@ -71,161 +73,158 @@ export default function Register() {
         <SafeAreaView style={styles.safeArea}>
             <KeyboardAvoidingView
                 style={styles.keyboardAvoid}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-                    <ScrollView
-                        contentContainerStyle={styles.scrollContainer}
-                        showsVerticalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        {/* Centered Header Section */}
-                        <View style={styles.header}>
-                            <View style={styles.brandMark}>
-                                <Image 
-                                    source={require('@/assets/images/icon.png')} 
-                                    style={styles.logoImage} 
-                                    resizeMode="cover"
+                <ScrollView
+                    contentContainerStyle={styles.scrollContainer}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                >
+                    {/* Centered Header Section */}
+                    <View style={styles.header}>
+                        <View style={styles.brandMark}>
+                            <Image 
+                                source={require('@/assets/images/icon.png')} 
+                                style={styles.logoImage} 
+                                resizeMode="cover"
+                            />
+                        </View>
+                        <Text style={styles.eyebrow}>YOUR FRENCH JOURNEY</Text>
+                        <Text style={styles.title}>Start learning.</Text>
+                        <Text style={styles.subtitle}>
+                            Create an account and build a daily habit that sticks.
+                        </Text>
+                    </View>
+
+                    {/* Form Section */}
+                    <View style={styles.form}>
+                        <ServerWakeBanner />
+
+                        {/* First Name & Last Name Side-by-Side */}
+                        <View style={styles.row}>
+                            <View style={styles.halfWidth}>
+                                <Field
+                                    control={control}
+                                    name="firstName"
+                                    label="First name"
+                                    error={errors.firstName?.message}
+                                    autoCapitalize="words"
+                                    autoComplete="given-name"
+                                    editable={!isSubmitting}
                                 />
                             </View>
-                            <Text style={styles.eyebrow}>YOUR FRENCH JOURNEY</Text>
-                            <Text style={styles.title}>Start learning.</Text>
-                            <Text style={styles.subtitle}>
-                                Create an account and build a daily habit that sticks.
-                            </Text>
-                        </View>
-
-                        {/* Form Section */}
-                        <View style={styles.form}>
-                            {/* First Name & Last Name Side-by-Side */}
-                            <View style={styles.row}>
-                                <View style={styles.halfWidth}>
-                                    <Field
-                                        control={control}
-                                        name="firstName"
-                                        label="First name"
-                                        error={errors.firstName?.message}
-                                        autoCapitalize="words"
-                                        autoComplete="given-name"
-                                        editable={!isSubmitting}
-                                    />
-                                </View>
-                                <View style={styles.halfWidth}>
-                                    <Field
-                                        control={control}
-                                        name="lastName"
-                                        label="Last name"
-                                        error={errors.lastName?.message}
-                                        autoCapitalize="words"
-                                        autoComplete="family-name"
-                                        editable={!isSubmitting}
-                                    />
-                                </View>
+                            <View style={styles.halfWidth}>
+                                <Field
+                                    control={control}
+                                    name="lastName"
+                                    label="Last name"
+                                    error={errors.lastName?.message}
+                                    autoCapitalize="words"
+                                    autoComplete="family-name"
+                                    editable={!isSubmitting}
+                                />
                             </View>
-
-                            <Field
-                                control={control}
-                                name="username"
-                                label="Username (optional)"
-                                error={errors.username?.message}
-                                autoCapitalize="none"
-                                autoComplete="username"
-                                autoCorrect={false}
-                                spellCheck={false}
-                                editable={!isSubmitting}
-                            />
-
-                            <Field
-                                control={control}
-                                name="email"
-                                label="Email"
-                                error={errors.email?.message}
-                                autoCapitalize="none"
-                                keyboardType="email-address"
-                                autoComplete="email"
-                                autoCorrect={false}
-                                spellCheck={false}
-                                editable={!isSubmitting}
-                            />
-
-                            <Field
-                                control={control}
-                                name="password"
-                                label="Password"
-                                error={errors.password?.message}
-                                secureTextEntry={!showPassword}
-                                autoCapitalize="none"
-                                autoComplete="new-password"
-                                autoCorrect={false}
-                                spellCheck={false}
-                                editable={!isSubmitting}
-                            >
-                                <Pressable
-                                    onPress={() => setShowPassword((prev) => !prev)}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                                    disabled={isSubmitting}
-                                >
-                                    <Text style={[styles.showPassword, isSubmitting && styles.disabledText]}>
-                                        {showPassword ? 'Hide' : 'Show'}
-                                    </Text>
-                                </Pressable>
-                            </Field>
-
-                            <Field
-                                control={control}
-                                name="confirmPassword"
-                                label="Confirm password"
-                                error={errors.confirmPassword?.message}
-                                secureTextEntry={!showConfirmPassword}
-                                autoCapitalize="none"
-                                autoComplete="new-password"
-                                autoCorrect={false}
-                                spellCheck={false}
-                                editable={!isSubmitting}
-                            >
-                                <Pressable
-                                    onPress={() => setShowConfirmPassword((prev) => !prev)}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={showConfirmPassword ? 'Hide password' : 'Show password'}
-                                    disabled={isSubmitting}
-                                >
-                                    <Text style={[styles.showPassword, isSubmitting && styles.disabledText]}>
-                                        {showConfirmPassword ? 'Hide' : 'Show'}
-                                    </Text>
-                                </Pressable>
-                            </Field>
-
-                            {serverError ? (
-                                <Text style={styles.serverError} accessibilityRole="alert">
-                                    {serverError}
-                                </Text>
-                            ) : null}
-
-                            <Pressable
-                                style={({ pressed }) => [
-                                    styles.primaryButton,
-                                    pressed && styles.pressed,
-                                    isSubmitting && styles.disabledButton,
-                                ]}
-                                disabled={isSubmitting}
-                                onPress={handleSubmit(onSubmit)}
-                                accessibilityRole="button"
-                                accessibilityState={{ disabled: isSubmitting }}
-                            >
-                                {isSubmitting ? (
-                                    <ActivityIndicator color="#FFFFFF" size="small" />
-                                ) : (
-                                    <Text style={styles.primaryButtonText}>Create account</Text>
-                                )}
-                            </Pressable>
                         </View>
 
-                        <Link href="/(auth)/login" style={styles.link} disabled={isSubmitting}>
-                            Already have an account? Sign in
-                        </Link>
-                    </ScrollView>
-                </TouchableWithoutFeedback>
+                        <GenderSelector
+                            control={control}
+                            error={errors.gender?.message}
+                            disabled={isSubmitting}
+                        />
+
+                        <Field
+                            control={control}
+                            name="username"
+                            label="Username (optional)"
+                            error={errors.username?.message}
+                            autoCapitalize="none"
+                            autoComplete="username"
+                            autoCorrect={false}
+                            spellCheck={false}
+                            editable={!isSubmitting}
+                        />
+
+                        <Field
+                            control={control}
+                            name="email"
+                            label="Email"
+                            error={errors.email?.message}
+                            autoCapitalize="none"
+                            keyboardType="email-address"
+                            autoComplete="email"
+                            autoCorrect={false}
+                            spellCheck={false}
+                            editable={!isSubmitting}
+                        />
+
+                        <Field
+                            control={control}
+                            name="password"
+                            label="Password"
+                            error={errors.password?.message}
+                            secureTextEntry={!showPassword}
+                            autoCapitalize="none"
+                            autoComplete="new-password"
+                            autoCorrect={false}
+                            spellCheck={false}
+                            editable={!isSubmitting}
+                        >
+                            <PasswordVisibilityToggle
+                                visible={showPassword}
+                                onPress={() => setShowPassword((prev) => !prev)}
+                                disabled={isSubmitting}
+                            />
+                        </Field>
+
+                        <Field
+                            control={control}
+                            name="confirmPassword"
+                            label="Confirm password"
+                            error={errors.confirmPassword?.message}
+                            secureTextEntry={!showConfirmPassword}
+                            autoCapitalize="none"
+                            autoComplete="new-password"
+                            autoCorrect={false}
+                            spellCheck={false}
+                            editable={!isSubmitting}
+                        >
+                            <PasswordVisibilityToggle
+                                visible={showConfirmPassword}
+                                onPress={() => setShowConfirmPassword((prev) => !prev)}
+                                disabled={isSubmitting}
+                            />
+                        </Field>
+
+                        {serverError ? (
+                            <Text style={styles.serverError} accessibilityRole="alert">
+                                {serverError}
+                            </Text>
+                        ) : null}
+
+                        <Pressable
+                            style={({ pressed }) => [
+                                styles.primaryButton,
+                                pressed && styles.pressed,
+                                isSubmitting && styles.disabledButton,
+                            ]}
+                            disabled={isSubmitting}
+                            onPress={handleSubmit(onSubmit)}
+                            accessibilityRole="button"
+                            accessibilityState={{ disabled: isSubmitting }}
+                        >
+                            {isSubmitting ? (
+                                <ActivityIndicator color="#FFFFFF" size="small" />
+                            ) : (
+                                <Text style={styles.primaryButtonText}>Create account</Text>
+                            )}
+                        </Pressable>
+                    </View>
+
+                    <Link href="/(auth)/login" style={styles.link} disabled={isSubmitting}>
+                        Already have an account? Sign in
+                    </Link>
+                </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -255,6 +254,56 @@ function Field({ control, name, label, error, children, ...inputProps }) {
                 />
                 {children}
             </View>
+            {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
+        </View>
+    );
+}
+
+function GenderSelector({ control, error, disabled }) {
+    const options = [
+        { value: 'male', label: 'Male', emoji: '👨' },
+        { value: 'female', label: 'Female', emoji: '👩' },
+    ];
+
+    return (
+        <View style={styles.field}>
+            <Text style={styles.label}>Gender</Text>
+            <Controller
+                control={control}
+                name="gender"
+                render={({ field: { onChange, value } }) => (
+                    <View style={styles.genderRow}>
+                        {options.map((option) => {
+                            const selected = value === option.value;
+                            return (
+                                <Pressable
+                                    key={option.value}
+                                    onPress={() => onChange(option.value)}
+                                    disabled={disabled}
+                                    style={({ pressed }) => [
+                                        styles.genderOption,
+                                        selected && styles.genderOptionSelected,
+                                        pressed && styles.pressed,
+                                    ]}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ selected, disabled }}
+                                    accessibilityLabel={option.label}
+                                >
+                                    <Text style={styles.genderEmoji}>{option.emoji}</Text>
+                                    <Text
+                                        style={[
+                                            styles.genderLabel,
+                                            selected && styles.genderLabelSelected,
+                                        ]}
+                                    >
+                                        {option.label}
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
+                )}
+            />
             {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
         </View>
     );
@@ -304,6 +353,26 @@ const styles = StyleSheet.create({
     halfWidth: { flex: 1 },
     field: { gap: 6 },
     label: { color: '#344054', fontSize: 14, fontWeight: '700' },
+    genderRow: { flexDirection: 'row', gap: 12 },
+    genderOption: {
+        flex: 1,
+        minHeight: 54,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1.5,
+        borderColor: '#D8DEE9',
+        borderRadius: 14,
+    },
+    genderOptionSelected: {
+        borderColor: '#1476D4',
+        backgroundColor: '#EAF3FC',
+    },
+    genderEmoji: { fontSize: 22 },
+    genderLabel: { color: '#647084', fontSize: 15, fontWeight: '600' },
+    genderLabelSelected: { color: '#1476D4', fontWeight: '800' },
     inputRow: {
         minHeight: 54,
         flexDirection: 'row',
@@ -319,7 +388,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#FEF3F2',
     },
     input: { flex: 1, color: '#182133', fontSize: 16, minHeight: 54 },
-    showPassword: { color: '#1476D4', fontWeight: '700', paddingVertical: 12, paddingLeft: 12 },
 
     error: { color: '#B42318', fontSize: 13, fontWeight: '500', marginTop: 2 },
     serverError: {

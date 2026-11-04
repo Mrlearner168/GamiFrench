@@ -5,6 +5,7 @@ export type UserProfile = {
   email: string;
   username?: string;
   frenchLevel: 'beginner' | 'elementary' | 'intermediate' | 'advanced';
+  gender: 'male' | 'female';
   onboardingComplete: boolean;
 };
 
@@ -24,4 +25,5 @@ export type RegistrationInput = AuthCredentials & {
   lastName: string;
   username?: string;
   confirmPassword: string;
+  gender: 'male' | 'female';
 };

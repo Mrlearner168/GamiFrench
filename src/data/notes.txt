@@ -1,0 +1,7 @@
+//improvement 
+- resized the nodes size fit in one screen without scrolling , make it more like the nearest node is biger and the farthest is smaller. make it more responsive.
+- change voice to female and smaller pitch 
+- change the next question in the sublesson for automatic pop up and proceed to next question = done
+- learn screen , gramar icon change to (face icon) 
+- make the icon can be change based on the gender (male female ) and dont make it move back and fort but make it slowly moving depends on the sublesson percentage 
+- add a back button arrow in the journey screen beside next mission to see the previous mission completed . also make sure that the first screen when open the journey screen show the current not completed mission

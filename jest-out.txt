@@ -1,0 +1,147 @@
+PASS src/services/__tests__/scoring.test.js
+PASS src/services/__tests__/pronunciation.test.js
+PASS src/services/__tests__/transcription.test.js
+  ● Console
+
+    console.log
+      [Transcription] Groq tier failed; falling back offline. Error: boom
+          at D:\French Game App\Frontend\GamiFrench\src\services\transcription.ts:75:11
+          at Generator.next (<anonymous>)
+          at asyncGeneratorStep (D:\French Game App\Frontend\GamiFrench\node_modules\@babel\runtime\helpers\asyncToGenerator.js:3:17)
+          at _next (D:\French Game App\Frontend\GamiFrench\node_modules\@babel\runtime\helpers\asyncToGenerator.js:17:9)
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+
+      at log (src/services/transcription.ts:98:15)
+          at Generator.throw (<anonymous>)
+
+PASS src/store/__tests__/sync-engine.test.js
+  ● Console
+
+    console.log
+      [SyncEngine] speaking upgrade deferred Error: still no transcript
+          at Object.<anonymous> (D:\French Game App\Frontend\GamiFrench\src\store\__tests__\sync-engine.test.js:67:11)
+          at Generator.next (<anonymous>)
+          at asyncGeneratorStep (D:\French Game App\Frontend\GamiFrench\node_modules\@babel\runtime\helpers\asyncToGenerator.js:3:17)
+          at _next (D:\French Game App\Frontend\GamiFrench\node_modules\@babel\runtime\helpers\asyncToGenerator.js:17:9)
+          at D:\French Game App\Frontend\GamiFrench\node_modules\@babel\runtime\helpers\asyncToGenerator.js:22:7
+          at new Promise (<anonymous>)
+          at Object.<anonymous> (D:\French Game App\Frontend\GamiFrench\node_modules\@babel\runtime\helpers\asyncToGenerator.js:14:12)
+          at D:\French Game App\Frontend\GamiFrench\node_modules\jest-mock\build\index.js:397:39
+          at Object.<anonymous> (D:\French Game App\Frontend\GamiFrench\node_modules\jest-mock\build\index.js:404:13)
+          at Object.mockConstructor [as upgradeSpeakingAttempt] (D:\French Game App\Frontend\GamiFrench\node_modules\jest-mock\build\index.js:148:19)
+          at upgradeSpeakingAttempt (D:\French Game App\Frontend\GamiFrench\src\store\sync-engine.ts:148:23)
+          at Generator.next (<anonymous>)
+          at asyncGeneratorStep (D:\French Game App\Frontend\GamiFrench\node_modules\@babel\runtime\helpers\asyncToGenerator.js:3:17)
+          at _next (D:\French Game App\Frontend\GamiFrench\node_modules\@babel\runtime\helpers\asyncToGenerator.js:17:9)
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+
+      at log (src/store/sync-engine.ts:153:19)
+          at Generator.throw (<anonymous>)
+
+PASS src/services/__tests__/tokenValidation.test.js
+  ● Console
+
+    console.log
+      [ApiClient] Base API URL set to: http://localhost:5000/api/v1
+
+      at Object.log (src/services/apiClient.ts:20:9)
+
+    console.log
+      [TokenValidation] access token payload is not JSON SyntaxError: Unexpected token 'o', "not json" is not valid JSON
+          at JSON.parse (<anonymous>)
+          at parse (D:\French Game App\Frontend\GamiFrench\src\services\tokenValidation.ts:184:19)
+          at decodeAccessTokenClaims (D:\French Game App\Frontend\GamiFrench\src\services\tokenValidation.ts:222:18)
+          at Object.<anonymous> (D:\French Game App\Frontend\GamiFrench\src\services\__tests__\tokenValidation.test.js:107:31)
+          at Promise.then.completed (D:\French Game App\Frontend\GamiFrench\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (D:\French Game App\Frontend\GamiFrench\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (D:\French Game App\Frontend\GamiFrench\node_modules\jest-circus\build\run.js:316:40)
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+          at _runTest (D:\French Game App\Frontend\GamiFrench\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (D:\French Game App\Frontend\GamiFrench\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (D:\French Game App\Frontend\GamiFrench\node_modules\jest-circus\build\run.js:121:9)
+          at run (D:\French Game App\Frontend\GamiFrench\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (D:\French Game App\Frontend\GamiFrench\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (D:\French Game App\Frontend\GamiFrench\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (d:\French Game App\Frontend\GamiFrench\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (d:\French Game App\Frontend\GamiFrench\node_modules\jest-runner\build\runTest.js:444:34)
+          at Object.worker (d:\French Game App\Frontend\GamiFrench\node_modules\jest-runner\build\testWorker.js:106:12)
+
+      at log (src/services/tokenValidation.ts:186:13)
+
+    console.warn
+      [TokenValidation] server identity does not match the stored session
+
+    [0m [90m 285 |[39m       localId [33m!==[39m serverId
+     [90m 286 |[39m     ) {
+    [31m[1m>[22m[39m[90m 287 |[39m       console[33m.[39mwarn([32m'[TokenValidation] server identity does not match the stored session'[39m)[33m;[39m
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 288 |[39m       [36mreturn[39m {
+     [90m 289 |[39m         ok[33m:[39m [36mfalse[39m[33m,[39m
+     [90m 290 |[39m         reason[33m:[39m [32m'identity-mismatch'[39m[33m,[39m[0m
+
+      at warn (src/services/tokenValidation.ts:287:15)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.warn
+      [TokenValidation] session rejected by the server { status: 401, code: 'INVALID_TOKEN' }
+
+    [0m [90m 301 |[39m
+     [90m 302 |[39m     [36mif[39m (error [36minstanceof[39m [33mApiError[39m) {
+    [31m[1m>[22m[39m[90m 303 |[39m       console[33m.[39mwarn([32m'[TokenValidation] session rejected by the server'[39m[33m,[39m {
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 304 |[39m         status[33m:[39m error[33m.[39mstatus[33m,[39m
+     [90m 305 |[39m         code[33m:[39m error[33m.[39mcode[33m,[39m
+     [90m 306 |[39m       })[33m;[39m[0m
+
+      at warn (src/services/tokenValidation.ts:303:15)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.warn
+      [TokenValidation] session rejected by the server { status: 403, code: undefined }
+
+    [0m [90m 301 |[39m
+     [90m 302 |[39m     [36mif[39m (error [36minstanceof[39m [33mApiError[39m) {
+    [31m[1m>[22m[39m[90m 303 |[39m       console[33m.[39mwarn([32m'[TokenValidation] session rejected by the server'[39m[33m,[39m {
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 304 |[39m         status[33m:[39m error[33m.[39mstatus[33m,[39m
+     [90m 305 |[39m         code[33m:[39m error[33m.[39mcode[33m,[39m
+     [90m 306 |[39m       })[33m;[39m[0m
+
+      at warn (src/services/tokenValidation.ts:303:15)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.log
+      [TokenValidation] server unreachable; keeping the local session
+
+      at log (src/services/tokenValidation.ts:298:15)
+          at Generator.throw (<anonymous>)
+
+    console.warn
+      [TokenValidation] session rejected by the server { status: 500, code: undefined }
+
+    [0m [90m 301 |[39m
+     [90m 302 |[39m     [36mif[39m (error [36minstanceof[39m [33mApiError[39m) {
+    [31m[1m>[22m[39m[90m 303 |[39m       console[33m.[39mwarn([32m'[TokenValidation] session rejected by the server'[39m[33m,[39m {
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 304 |[39m         status[33m:[39m error[33m.[39mstatus[33m,[39m
+     [90m 305 |[39m         code[33m:[39m error[33m.[39mcode[33m,[39m
+     [90m 306 |[39m       })[33m;[39m[0m
+
+      at warn (src/services/tokenValidation.ts:303:15)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+PASS src/store/__tests__/node-progress.test.js
+
+Test Suites: 6 passed, 6 total
+Tests:       86 passed, 86 total
+Snapshots:   0 total
+Time:        2.504 s
+Ran all test suites.

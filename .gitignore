@@ -40,5 +40,12 @@ yarn-error.*
 example
 
 # generated native folders
-/ios
+# EAS-only workflow: EAS generates the native projects in the cloud,
+# so neither /android nor /ios needs to be committed.
 /android
+/ios
+
+# EAS build logs
+easbuild.log
+easstatus.log
+easinit.log

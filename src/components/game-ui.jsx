@@ -2,6 +2,20 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { sounds } from '@/services/sound';
+
+/**
+ * Every shared button plays a tap — one place, so no screen can have a
+ * silent button. Individual screens can still add their own sounds
+ * (correct/wrong/reward/...) on top.
+ */
+function withTap(onPress) {
+  return (event) => {
+    sounds.tap();
+    onPress?.(event);
+  };
+}
+
 export function GameHeader({ eyebrow, title, subtitle, back = false }) {
   const insets = useSafeAreaInsets();
 
@@ -13,7 +27,7 @@ export function GameHeader({ eyebrow, title, subtitle, back = false }) {
             accessibilityLabel="Go back"
             accessibilityRole="button"
             hitSlop={10}
-            onPress={() => router.back()}
+            onPress={withTap(() => router.back())}
             style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
           >
             <Text style={styles.backIcon}>‹</Text>
@@ -52,7 +66,7 @@ export function PrimaryButton({ children, onPress, disabled = false }) {
     <Pressable
       accessibilityRole="button"
       disabled={disabled}
-      onPress={onPress}
+      onPress={withTap(onPress)}
       style={({ pressed }) => [styles.primaryButton, disabled && styles.disabled, pressed && styles.pressed]}
     >
       <Text style={styles.primaryButtonText}>{children}</Text>

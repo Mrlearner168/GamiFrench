@@ -1,12 +1,10 @@
-import { router } from 'expo-router';
-import * as Speech from 'expo-speech';
-import { useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   Image,
   ImageBackground,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -25,36 +23,138 @@ import {
 } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
-import { getCountryTopics, getDefaultModuleId } from '@/data/lesson-catalog';
+import { getChallengeCycle } from '@/data/challenges/challengeCatalog';
+import { sounds } from '@/services/sound';
+import { ENGLISH_LOCALE, speak, stopAll as stopAllSpeech } from '@/services/voice';
+import { getCountryForModule, getCountryTopics, getDefaultModuleId, getModuleLabel, lessonCatalog } from '@/data/lessons/catalog';
+import { missionCatalog } from '@/data/lessons/missionCatalog';
+import { isNodeComplete, isMissionComplete } from '@/data/lessons/nodeProgress';
+import { getModuleLearningTarget } from '@/data/lessons/nextTarget';
+import { getReasonCopy } from '@/services/recommendations';
+import { NODE_PASS_PERCENTAGE } from '@/services/scoring';
+import { useDailyResetTimer } from '@/hooks/use-challenge-timer';
 import { useAuth } from '@/store/auth-context';
+import { buildDailyOverview, loadChallengeState } from '@/store/challenge-progress';
+import {
+  applyServerProgress,
+  claimedMissionsFromServer,
+  getObjectiveCompletion,
+  getTopicProgress,
+  isMissionClaimed,
+  loadClaimedMissions,
+  loadLastPlayedTopic,
+  loadLessonProgress,
+  loadModuleQuizResults,
+  mergeClaimedMissions,
+} from '@/store/lesson-progress';
+import { getStartupAssessment, hasStartupAssessment } from '@/store/profile-cache';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
   Dimensions.get('window');
 
 const isSmallScreen = SCREEN_WIDTH < 380;
 const isTablet = SCREEN_WIDTH >= 600;
+
 /*
 |--------------------------------------------------------------------------
 | MAP SIZE
 |--------------------------------------------------------------------------
+| The map is a static, non-scrolling surface that fills the whole screen.
+| Nodes are positioned inside a vertical "band" that starts below the HUD /
+| progress cards and ends above the "Continue" card (see getMapLayout), so the
+| whole journey is always visible without any horizontal or vertical scroll.
 */
-const MAP_WIDTH = SCREEN_WIDTH * 2.5;
+const MAP_WIDTH = SCREEN_WIDTH;
 const MAP_HEIGHT = SCREEN_HEIGHT;
+
+/*
+|--------------------------------------------------------------------------
+| MAP SAFE AREA (dynamic, computed per insets)
+|--------------------------------------------------------------------------
+| Heights reserved by the floating chrome on top of the map.
+*/
+const PROGRESS_ROW_TOP = 80;
+const PROGRESS_ROW_HEIGHT = 74;
+const CONTINUE_CARD_HEIGHT = 82;
+const MAP_SIDE_PADDING = 8;
+
+const PROGRESS_COUNTRY = 'Canada';
+
 /*
 |--------------------------------------------------------------------------
 | NODE SIZE
 |--------------------------------------------------------------------------
+| Every stop is a single "pill": the circular flag on one side and the
+| country label on the other. Keeping the whole stop in ONE box of a fixed
+| height is what makes five rows of stops fit on a screen with no scrolling.
 */
 const MAX_NODE_SIZE = isSmallScreen
-  ? 54
+  ? 44
   : isTablet
-    ? 76
-    : 68;
+    ? 62
+    : 54;
 const MIN_NODE_SIZE = isSmallScreen
-  ? 22
+  ? 26
   : isTablet
-    ? 32
-    : 28;
+    ? 34
+    : 30;
+
+/* Pill box (the 18 leaves room for the 3px "current" border on every side). */
+const NODE_PILL_WIDTH = isSmallScreen
+  ? 140
+  : isTablet
+    ? 210
+    : 164;
+const NODE_PILL_HEIGHT = MAX_NODE_SIZE + 18;
+
+/*
+|--------------------------------------------------------------------------
+| MAP ROWS
+|--------------------------------------------------------------------------
+| The map is a serpentine of NODE_ROWS rows (two stops per row). This drives
+| the auto-advance: when a stop is finished the map slides down by one row so
+| the finished row falls behind the player, and it slides back up if the
+| current stop ever moves backwards.
+*/
+const NODE_ROWS = 5;
+const NODE_ROW_STEP = 0.8 / (NODE_ROWS - 1);
+const NODE_BOTTOM_ROW = 0.9;                    // topPercent of the closest row
+const MAP_ADVANCE_DURATION = 620;
+
+/* Pills on the right half of the screen are mirrored (flag on the right), so
+ * the road always runs along the outside of the map. This is the distance
+ * between the centre of a pill and the centre of its circle. */
+const NODE_PILL_PADDING = 6;
+const NODE_ANCHOR_OFFSET =
+  NODE_PILL_WIDTH / 2 - NODE_PILL_PADDING - MAX_NODE_SIZE / 2;
+
+/*
+|--------------------------------------------------------------------------
+| PERSPECTIVE (distance view)
+|--------------------------------------------------------------------------
+| The map is seen from an angle: the stops at the top of the screen are far
+| away and drawn smaller, the ones at the bottom are close and drawn bigger.
+| A stop depth of 1 is the size of a bottom stop.
+*/
+const MIN_NODE_DEPTH = 0.58;
+const MAX_NODE_DEPTH = 1;
+/* < 1 pushes the growth towards the bottom of the screen (closer to us). */
+const NODE_DEPTH_CURVE = 0.8;
+/* Minimum road left visible between two rows of stops. */
+const MIN_ROAD_GAP = 6;
+
+/* Traveler + speech bubble metrics (used to anchor the bubble). */
+const TRAVELER_WIDTH = 170;
+const TRAVELER_CHARACTER_HEIGHT = 46;
+const BUBBLE_MIN_SPACE = TRAVELER_CHARACTER_HEIGHT + 118;
+/* The traveler box is this wide so its centre can sit exactly on the icon. */
+const TRAVELER_ICON_WIDTH = 44;
+/* Bubble pointer (triangle) size and the minimum gap to the bubble corners. */
+const BUBBLE_POINTER_SIZE = 12;
+const BUBBLE_POINTER_INSET = 14;
+/* How long the speech bubble stays open before it tucks itself away. */
+const BUBBLE_AUTO_HIDE_MS = 5000;
+
 /*
 |--------------------------------------------------------------------------
 | COLORS
@@ -76,43 +176,42 @@ const COLORS = {
 
 /*
 |--------------------------------------------------------------------------
-| NODES
+| NODES (Cleaned up hardcoded status)
 |--------------------------------------------------------------------------
+| The map is a 5-row serpentine: two nodes per row, alternating sides, so
+| every stop is reachable inside a single screen without scrolling.
+|  - leftPercent / topPercent are relative to the visible map band
+|    (see getMapLayout), NOT to the raw screen size.
 */
-
 const NODES = [
   {
     id: 1,
-    topPercent: 0.68,
-    leftPercent: 0.06,
-    status: 'current',
+    topPercent: 0.90,
+    leftPercent: 0.26,
     title: 'Canada',
     desc: 'North America',
     image: require('../../../assets/images/countries/canada.jpg'),
   },
   {
     id: 2,
-    topPercent: 0.68,
-    leftPercent: 0.24,
-    status: 'Locked',
+    topPercent: 0.90,
+    leftPercent: 0.74,
     title: 'Morocco',
     desc: 'North Africa',
     image: require('../../../assets/images/countries/morocco.jpg'),
   },
   {
     id: 3,
-    topPercent: 0.59,
-    leftPercent: 0.24,
-    status: 'Locked',
+    topPercent: 0.70,
+    leftPercent: 0.74,
     title: 'Ivory Coast',
     desc: 'West Africa',
     image: require('../../../assets/images/countries/ivory_coast.jpg'),
   },
   {
     id: 4,
-    topPercent: 0.59,
-    leftPercent: 0.42,
-    status: 'Locked',
+    topPercent: 0.70,
+    leftPercent: 0.26,
     title: 'Italy',
     desc: 'Europe',
     image: require('../../../assets/images/countries/italy.jpg'),
@@ -120,8 +219,7 @@ const NODES = [
   {
     id: 5,
     topPercent: 0.50,
-    leftPercent: 0.42,
-    status: 'Locked',
+    leftPercent: 0.26,
     title: 'Cameroon',
     desc: 'Central Africa',
     image: require('../../../assets/images/countries/cameroon.jpg'),
@@ -129,44 +227,39 @@ const NODES = [
   {
     id: 6,
     topPercent: 0.50,
-    leftPercent: 0.59,
-    status: 'Locked',
+    leftPercent: 0.74,
     title: 'Belgium',
     desc: 'Europe',
     image: require('../../../assets/images/countries/belgium.jpg'),
   },
   {
     id: 7,
-    topPercent: 0.41,
-    leftPercent: 0.59,
-    status: 'Locked',
+    topPercent: 0.30,
+    leftPercent: 0.74,
     title: 'Switzerland',
     desc: 'Europe',
     image: require('../../../assets/images/countries/switzerland.jpg'),
   },
   {
     id: 8,
-    topPercent: 0.41,
-    leftPercent: 0.77,
-    status: 'Locked',
+    topPercent: 0.30,
+    leftPercent: 0.26,
     title: 'Monaco',
     desc: 'Europe',
     image: require('../../../assets/images/countries/monaco.jpg'),
   },
   {
     id: 9,
-    topPercent: 0.32,
-    leftPercent: 0.77,
-    status: 'Locked',
+    topPercent: 0.10,
+    leftPercent: 0.26,
     title: 'Luxembourg',
     desc: 'Europe',
     image: require('../../../assets/images/countries/luxembourg.jpg'),
   },
   {
     id: 10,
-    topPercent: 0.32,
-    leftPercent: 0.90,
-    status: 'Locked',
+    topPercent: 0.10,
+    leftPercent: 0.74,
     title: 'France',
     desc: 'Europe',
     image: require('../../../assets/images/countries/france.jpg'),
@@ -178,18 +271,119 @@ const NODES = [
 | HELPERS
 |--------------------------------------------------------------------------
 */
-function getNodeX(node) {
-  return MAP_WIDTH * node.leftPercent;
-}
-function getNodeY(node) {
-  return MAP_HEIGHT * node.topPercent;
-}
-function getNodeSize(nodeIndex) {
-  if (NODES.length <= 1) return MAX_NODE_SIZE;
 
-  const currentIndex = NODES.findIndex(
-    (node) => node.status === 'current',
+/**
+ * Vertical band of the screen that is actually free for the map nodes: it
+ * starts right below the progress cards and stops right above the
+ * "Continue" card. Everything is laid out inside that band so the map never
+ * needs to scroll.
+ *
+ * All values are in the same coordinate space as the map layer, which lives
+ * inside a SafeAreaView (top inset already removed).
+ */
+function getMapLayout(insets) {
+  const topInset = Math.max(insets?.top ?? 0, 10);
+  const bottomInset = Math.max(insets?.bottom ?? 0, 0);
+
+  // Bottom of the progress cards, which are positioned with
+  // `PROGRESS_ROW_TOP + insets.top`.
+  const top = PROGRESS_ROW_TOP + topInset + PROGRESS_ROW_HEIGHT + 10;
+  // The SafeAreaView only removes the top inset, so this is the map height.
+  const contentHeight = MAP_HEIGHT - topInset;
+  const bottom = contentHeight - (bottomInset + CONTINUE_CARD_HEIGHT + 10);
+
+  // Guard against very short screens / large insets so the band never
+  // collapses to zero.
+  const height = Math.max(220, bottom - top);
+
+  /* Five rows share the band: shrink the stops a little when the band is
+   * short so neighbouring rows never touch. The deepest pair of rows (the two
+   * closest to the player) sets the maximum scale. */
+  const rowSpacing = (height * 0.8) / 4;
+  const scale = Math.min(
+    isTablet ? 1.12 : 1.02,
+    Math.max(0.5, (rowSpacing - MIN_ROAD_GAP) / (getMaxRowDepth() * NODE_PILL_HEIGHT)),
   );
+
+  return {
+    top,
+    bottom: top + height,
+    height,
+    contentHeight,
+    width: MAP_WIDTH,
+    scale,
+  };
+}
+
+function getNodeX(node, layout) {
+  return layout.width * node.leftPercent;
+}
+function getNodeY(node, layout) {
+  return layout.top + layout.height * node.topPercent;
+}
+/*
+ * How many rows the map has to slide down so the current stop sits on the
+ * closest row. 0 = the map is at its original place, and it grows every time
+ * the player finishes a row, which pushes the finished stops behind him.
+ */
+function getNodeRowShift(node) {
+  if (!node) return 0;
+  const rows = Math.round(
+    (NODE_BOTTOM_ROW - node.topPercent) / NODE_ROW_STEP,
+  );
+  return Math.max(0, Math.min(NODE_ROWS - 1, rows));
+}
+/* Position of a stop inside the map band, once the map has slid. */
+function getShiftedTopPercent(node, rowShift) {
+  return node.topPercent + rowShift * NODE_ROW_STEP;
+}
+/*
+ * Perspective: 1 at the bottom of the screen (close to the player) down to
+ * MIN_NODE_DEPTH at the top (far away). Drives the size of every stop.
+ */
+function getNodeDepth(topPercent) {
+  const clamped = Math.max(0, Math.min(MAX_NODE_DEPTH, topPercent));
+  return (
+    MIN_NODE_DEPTH +
+    (MAX_NODE_DEPTH - MIN_NODE_DEPTH) *
+      Math.pow(clamped, NODE_DEPTH_CURVE)
+  );
+}
+/* Depth of a stop on screen: it gets closer (bigger) as the map advances. */
+function getNodeShiftedDepth(node, rowShift) {
+  return getNodeDepth(getShiftedTopPercent(node, rowShift));
+}
+/* Deepest average of two consecutive stops: used to fit the rows on screen. */
+function getMaxRowDepth() {
+  let max = 0;
+  for (let i = 1; i < NODES.length; i += 1) {
+    const pair =
+      (getNodeDepth(NODES[i - 1].topPercent) +
+        getNodeDepth(NODES[i].topPercent)) /
+      2;
+    if (pair > max) max = pair;
+  }
+  return max || MAX_NODE_DEPTH;
+}
+/* Is the pill mirrored (circle on the right side of the pill)? */
+function isNodeMirrored(node) {
+  return node.leftPercent > 0.5;
+}
+/* X of the circle inside the pill: the road connects the circles, not the
+ * middle of the pills, so the path stays visible between two stops. */
+function getNodeAnchorX(node, layout, depth) {
+  const offset = NODE_ANCHOR_OFFSET * layout.scale * depth;
+  return getNodeX(node, layout) + (isNodeMirrored(node) ? offset : -offset);
+}
+/* Keeps absolutely positioned boxes (traveler bubble) inside the screen. */
+function clampX(value, boxWidth, containerWidth = MAP_WIDTH) {
+  return Math.max(
+    MAP_SIDE_PADDING,
+    Math.min(containerWidth - boxWidth - MAP_SIDE_PADDING, value),
+  );
+}
+function getNodeSize(nodeIndex, currentIndex) {
+  if (NODES.length <= 1) return MAX_NODE_SIZE;
   if (currentIndex === -1) return MAX_NODE_SIZE;
 
   const distance = Math.abs(nodeIndex - currentIndex);
@@ -235,20 +429,99 @@ function getTravelerDialogue(node) {
 }
 
 /*
+ * Overall mission progress across the whole catalog, computed from real
+ * lesson progress. Returns { percent, completed, total }:
+ *  - a mission counts as completed when it is claimed OR every objective's
+ *    own target sub-lesson is completed;
+ *  - percent counts the objectives whose target sub-lesson is done, so the bar
+ *    moves as the player advances inside the current mission.
+ */
+function computeMissionProgress(catalog, progress, claimed) {
+  const total = catalog?.length ?? 0;
+  if (!total) return { percent: 0, completed: 0, total: 0 };
+
+  let completed = 0;
+  let objectiveSum = 0;
+  let objectiveCount = 0;
+
+  for (const mission of catalog) {
+    if (isMissionClaimed(mission.id, claimed)) {
+      completed += 1;
+      const objectives = mission.objectives?.length ?? 0;
+      objectiveSum += objectives;
+      objectiveCount += objectives;
+      continue;
+    }
+
+    if (!mission?.objectives?.length) continue;
+
+    const missionCountry =
+      getCountryForModule(mission.moduleId) || PROGRESS_COUNTRY;
+
+    let missionRatioSum = 0;
+    let missionObjectiveCount = 0;
+
+    for (const objective of mission.objectives) {
+      const completion = getObjectiveCompletion(
+        progress,
+        missionCountry,
+        objective.targetId,
+      );
+
+      if (!completion.found || completion.result?.subLesson == null) continue;
+
+      /*
+       * An objective targets ONE sub-lesson, so it is scored on that
+       * sub-lesson alone. Measuring the whole topic (as this used to) made an
+       * objective look unfinished until every sibling sub-lesson was done,
+       * which is what kept the mission - and therefore the map node - stuck.
+       */
+      missionObjectiveCount += 1;
+      missionRatioSum += completion.completed ? 1 : 0;
+    }
+
+    const objectivesDone = isMissionComplete(
+      mission,
+      progress,
+      missionCountry,
+      claimed,
+    );
+
+    if (objectivesDone) completed += 1;
+    objectiveSum += missionRatioSum;
+    objectiveCount += missionObjectiveCount;
+  }
+
+  const percent =
+    objectiveCount > 0
+      ? Math.min(100, Math.round((objectiveSum / objectiveCount) * 100))
+      : 0;
+
+  return { percent, completed, total };
+}
+
+/*
 |--------------------------------------------------------------------------
 | ROAD
 |--------------------------------------------------------------------------
 */
-function generateRoadPath() {
+/**
+ * Road between the circles, drawn in the map design coordinates: the whole
+ * node layer is translated by the animated map offset, so the path always
+ * stays glued to its stops. `rowShift` only matters for the horizontal
+ * anchors, which follow the depth a stop has once the map has slid.
+ */
+function generateRoadPath(layout, rowShift, stopCount = NODES.length) {
   if (!NODES.length) return '';
-  let path = `M ${getNodeX(NODES[0])} ${getNodeY(NODES[0])}`;
-  for (let i = 1; i < NODES.length; i += 1) {
+  let path = `M ${getNodeAnchorX(NODES[0], layout, getNodeShiftedDepth(NODES[0], rowShift))} ${getNodeY(NODES[0], layout)}`;
+  for (let i = 1; i < Math.min(stopCount, NODES.length); i += 1) {
     const previous = NODES[i - 1];
+
     const current = NODES[i];
-    const x1 = getNodeX(previous);
-    const y1 = getNodeY(previous);
-    const x2 = getNodeX(current);
-    const y2 = getNodeY(current);
+    const x1 = getNodeAnchorX(previous, layout, getNodeShiftedDepth(previous, rowShift));
+    const y1 = getNodeY(previous, layout);
+    const x2 = getNodeAnchorX(current, layout, getNodeShiftedDepth(current, rowShift));
+    const y2 = getNodeY(current, layout);
     const midpoint = (y1 + y2) / 2;
     path += ` C ${x1} ${midpoint} ${x2} ${midpoint} ${x2} ${y2}`;
   }
@@ -259,6 +532,24 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const { session, authenticatedRequest } = useAuth();
   const [progress, setProgress] = useState(null);
+  const [lessonProgress, setLessonProgress] = useState(null);
+  const [claimedMissions, setClaimedMissions] = useState([]);
+  // Best final-quiz score per module: a stop completes only at 80%+.
+  const [quizResults, setQuizResults] = useState(null);
+  const [lastPlayedTopic, setLastPlayedTopic] = useState(null);
+  const [startupAssessments, setStartupAssessments] = useState({});
+
+  /*
+   * Daily challenge summary for the "Challenges" button: cleared/total and
+   * the real completion percentage (no hardcoded values).
+   */
+  const [challengeOverview, setChallengeOverview] = useState(null);
+
+  /*
+   * Live countdown until the next daily challenge set (local midnight),
+   * displayed right next to the Challenges button.
+   */
+  const challengeCountdown = useDailyResetTimer();
 
   /*
   |--------------------------------------------------------------------------
@@ -266,26 +557,60 @@ export default function Home() {
   |--------------------------------------------------------------------------
   */
   const pulseScale = useSharedValue(1);
-  const walkOffset = useSharedValue(0);
-  const walkRotation = useSharedValue(0);
 
-  const travelerBob = useSharedValue(0);
-  const travelerSway = useSharedValue(0);
   const bubbleScale = useSharedValue(0.9);
   const bubbleOpacity = useSharedValue(0);
 
   /*
   |--------------------------------------------------------------------------
-  | CURRENT PLACE
+  | PLACES
   |--------------------------------------------------------------------------
   */
-  const currentPlaceNode = NODES.find(
+  const places = useMemo(() => {
+    const withCompletion = NODES.map((node) => {
+      const moduleId = getDefaultModuleId(node.title);
+      const startup = startupAssessments[moduleId] ?? null;
+      const startupTaken = Boolean(startup?.takenAt);
+      const topics = getCountryTopics(node.title, moduleId) ?? [];
+      const lessonsDone = topics.filter((topic) => {
+        const p = getTopicProgress(lessonProgress, node.title, topic);
+        return p.total > 0 && p.count >= p.total;
+      }).length;
+
+      return {
+        ...node,
+        moduleId,
+        lessonsDone,
+        lessonsTotal: topics.length,
+        startupTaken,
+        startupAssessment: startup,
+        isCompleted: isNodeComplete(
+          node.title,
+          lessonProgress,
+          claimedMissions,
+          quizResults,
+        ),
+      };
+    });
+
+    const currentIndex = withCompletion.findIndex((node) => !node.isCompleted);
+
+    return withCompletion.map((node, index) => ({
+      ...node,
+      status: node.isCompleted
+        ? 'completed'
+        : index === currentIndex
+          ? 'current'
+          : 'Locked',
+    }));
+  }, [lessonProgress, claimedMissions, startupAssessments, quizResults]);
+
+  const currentPlaceIndex = places.findIndex(
     (node) => node.status === 'current',
   );
-  const currentTopic = getCountryTopics(
-    currentPlaceNode?.title || 'Canada',
-    getDefaultModuleId(currentPlaceNode?.title || 'Canada'),
-  )[0];
+  const currentPlaceNode = places.find(
+    (node) => node.status === 'current',
+  );
   const mapBackgroundImage =
     currentPlaceNode
       ? currentPlaceNode.image
@@ -299,34 +624,124 @@ export default function Home() {
   const handleBubblePress = (node) => {
     if (!node) return;
 
-    // Stop previous speech if playing
-    Speech.stop();
-
-    const dialogueText = getTravelerDialogue(node);
-
-    Speech.speak(dialogueText, {
-      pitch: 1.0,
-      rate: 1.05,
-      language: 'en-US',
+    // Shared voice service: the engine is already warm and the English voice
+    // already resolved, and cutIn replaces any line still playing.
+    speak(getTravelerDialogue(node), {
+      pitch: 1.4, // Higher pitch for a small/young sound
+      rate: 1.05,  // Slightly faster cadence
+      language: ENGLISH_LOCALE,
+      cutIn: true,
     });
   };
 
   /*
   |--------------------------------------------------------------------------
-  | PROFILE & ANIMATION INITIALIZATION
+  | PROGRESS
+  |--------------------------------------------------------------------------
+  */
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+
+      const refreshProgress = async () => {
+        const storedClaims = await loadClaimedMissions();
+        const lastPlayed = await loadLastPlayedTopic();
+
+        /*
+         * Today's challenge set and the matching progress are read from the
+         * local challenge store (see src/store/challenge-progress.js).
+         */
+        const storedChallengeState = await loadChallengeState();
+        const challengeCycle = getChallengeCycle();
+
+        try {
+          const serverProgress = await authenticatedRequest('/progress');
+
+          if (mounted) {
+            setProgress(serverProgress);
+
+            /*
+             * Fold the server completions into the device mirror before
+             * reading it back. `mergeServerContentIntoLocal` buckets every
+             * sub-lesson under the country of its own module, so Morocco,
+             * Italy, ... each keep their own list instead of everything
+             * piling up under Canada (see the PROGRESS_COUNTRY note below).
+             */
+            await applyServerProgress(serverProgress);
+            setLessonProgress(await loadLessonProgress());
+            setChallengeOverview(
+              buildDailyOverview(storedChallengeState, challengeCycle, {
+                streak: Number(serverProgress.streak) || 0,
+              })
+            );
+            setClaimedMissions(
+              mergeClaimedMissions(
+                claimedMissionsFromServer(serverProgress.lessons),
+                storedClaims
+              )
+            );
+            setLastPlayedTopic(lastPlayed);
+            setQuizResults({ ...(await loadModuleQuizResults()) });
+
+            /* Load startup assessments for all modules (local cache, works offline). */
+            const startup = {};
+            for (const mod of lessonCatalog) {
+              try {
+                const a = await getStartupAssessment(mod.id);
+                if (a) startup[mod.id] = a;
+              } catch {
+                // Ignore per-module load failures.
+              }
+            }
+            setStartupAssessments(startup);
+          }
+        } catch (error) {
+          console.log('Failed to load server home progress:', error);
+          if (mounted) {
+            /*
+             * The device mirror is additive and never over-reports (see
+             * mergeServerContentIntoLocal), so it is safe to show even when the
+             * server could not be reached. Falling back to the local list is
+             * what lets a player who finished a module offline still walk past
+             * that stop instead of being pushed back to the beginning.
+             */
+            setLessonProgress(await loadLessonProgress());
+            setClaimedMissions(storedClaims);
+            setLastPlayedTopic(lastPlayed);
+            setQuizResults({ ...(await loadModuleQuizResults()) });
+
+            /* Load startup assessments for all modules (local cache, works offline). */
+            const startup = {};
+            for (const mod of lessonCatalog) {
+              try {
+                const a = await getStartupAssessment(mod.id);
+                if (a) startup[mod.id] = a;
+              } catch {
+                // Ignore per-module load failures.
+              }
+            }
+            setStartupAssessments(startup);
+            setChallengeOverview(
+              buildDailyOverview(storedChallengeState, challengeCycle)
+            );
+          }
+        }
+      };
+
+      refreshProgress();
+
+      return () => {
+        mounted = false;
+      };
+    }, [authenticatedRequest]),
+  );
+
+  /*
+  |--------------------------------------------------------------------------
+  | ANIMATION INITIALIZATION
   |--------------------------------------------------------------------------
   */
   useEffect(() => {
-    let mounted = true;
-    authenticatedRequest('/profile')
-      .then((profile) => {
-        if (mounted) {
-          setProgress(profile.progress);
-        }
-      })
-      .catch(() => {});
-
-    // Pulse Animation
     pulseScale.value = withRepeat(
       withSequence(
         withTiming(1.08, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
@@ -335,68 +750,82 @@ export default function Home() {
       -1,
       true,
     );
-    walkOffset.value = withRepeat(
-      withSequence(
-        withTiming(-4, { duration: 220, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 220, easing: Easing.inOut(Easing.ease) }),
-        withTiming(-4, { duration: 220, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 220, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      false,
-    );
-    walkRotation.value = withRepeat(
-      withSequence(
-        withTiming(-3, { duration: 220, easing: Easing.inOut(Easing.ease) }),
-        withTiming(3, { duration: 440, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 220, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      false,
-    );
-
-    // Traveler Walking Animation
-    travelerBob.value = withRepeat(
-      withSequence(
-        withTiming(-6, { duration: 350, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 350, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      true,
-    );
-    travelerSway.value = withRepeat(
-      withSequence(
-        withTiming(-3, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-        withTiming(3, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      true,
-    );
 
     return () => {
-      mounted = false;
-      Speech.stop();
+      stopAllSpeech();
     };
-  }, [
-    authenticatedRequest,
-    pulseScale,
-    walkOffset,
-    walkRotation,
-    travelerBob,
-    travelerSway,
-  ]);
+  }, [pulseScale]);
 
-  // Bubble Animation
+  /*
+   * The bubble opens when the traveler reaches a stop, then tucks itself away
+   * so it never hides the next stop on the map. Tapping the traveler brings it
+   * back; tapping the bubble (voice) keeps it open a little longer.
+   */
+  const [bubbleDismissedFor, setBubbleDismissedFor] = useState(null);
+  const [bubbleTick, setBubbleTick] = useState(0);
+  const bubbleVisible =
+    Boolean(currentPlaceNode) && bubbleDismissedFor !== currentPlaceNode.id;
+
   useEffect(() => {
+    if (!bubbleVisible) return;
+
     bubbleOpacity.value = 0;
     bubbleScale.value = 0.9;
 
     bubbleOpacity.value = withTiming(1, { duration: 500 });
-    bubbleScale.value = withTiming(1, { 
-      duration: 600, 
-      easing: Easing.out(Easing.back(1.5)) 
+    bubbleScale.value = withTiming(1, {
+      duration: 600,
+      easing: Easing.out(Easing.back(1.5))
     });
-  }, [currentPlaceNode?.id, bubbleOpacity, bubbleScale]);
+  }, [bubbleVisible, currentPlaceNode?.id, bubbleOpacity, bubbleScale]);
+
+  useEffect(() => {
+    if (!bubbleVisible) return undefined;
+
+    const nodeId = currentPlaceNode?.id;
+    const fade = setTimeout(() => {
+      bubbleOpacity.value = withTiming(0, { duration: 250 });
+    }, BUBBLE_AUTO_HIDE_MS);
+    const hide = setTimeout(
+      () => setBubbleDismissedFor(nodeId),
+      BUBBLE_AUTO_HIDE_MS + 260,
+    );
+
+    return () => {
+      clearTimeout(fade);
+      clearTimeout(hide);
+    };
+  }, [bubbleVisible, currentPlaceNode?.id, bubbleTick, bubbleOpacity]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | MAP LAYOUT + AUTO ADVANCE
+  |--------------------------------------------------------------------------
+  | Vertical band of the screen that is free for the nodes (between the
+  | progress cards and the "Continue" card). Everything on the map is
+  | positioned inside this band, which is what makes the screen scroll-free.
+  */
+  const mapLayout = useMemo(() => getMapLayout(insets), [insets]);
+
+  /*
+   * The map advances by itself: every time the current stop changes row, the
+   * whole map slides down one row so the finished row falls behind the
+   * player. If the current stop ever moves back, the map slides back up to
+   * its original place.
+   */
+  const mapRowShift = useMemo(
+    () => getNodeRowShift(currentPlaceNode),
+    [currentPlaceNode],
+  );
+  const mapOffset = useSharedValue(mapRowShift);
+
+  useEffect(() => {
+    if (mapOffset.value === mapRowShift) return;
+    mapOffset.value = withTiming(mapRowShift, {
+      duration: MAP_ADVANCE_DURATION,
+      easing: Easing.inOut(Easing.cubic),
+    });
+  }, [mapRowShift, mapOffset]);
 
   /*
   |--------------------------------------------------------------------------
@@ -404,8 +833,14 @@ export default function Home() {
   |--------------------------------------------------------------------------
   */
   const roadPath = useMemo(() => {
-    return generateRoadPath();
-  }, []);
+    return generateRoadPath(mapLayout, mapRowShift);
+  }, [mapLayout, mapRowShift]);
+
+  /* The stretch already travelled: from the first stop up to the current one. */
+  const travelledPath = useMemo(() => {
+    const reached = currentPlaceIndex === -1 ? NODES.length : currentPlaceIndex + 1;
+    return reached > 1 ? generateRoadPath(mapLayout, mapRowShift, reached) : '';
+  }, [mapLayout, mapRowShift, currentPlaceIndex]);
 
   /*
   |--------------------------------------------------------------------------
@@ -413,16 +848,16 @@ export default function Home() {
   |--------------------------------------------------------------------------
   */
   const pulsingStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: pulseScale.value },
-      { rotate: `${walkRotation.value}deg` },
-    ],
+    transform: [{ scale: pulseScale.value }],
   }));
 
-  const travelerAnimStyle = useAnimatedStyle(() => ({
+  /* The auto-advance: the whole node layer (road + stops + traveler) slides
+   * down by one row every time the current stop moves forward. */
+  const mapAdvanceStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateY: travelerBob.value },
-      { translateX: travelerSway.value },
+      {
+        translateY: mapOffset.value * mapLayout.height * NODE_ROW_STEP,
+      },
     ],
   }));
 
@@ -438,20 +873,160 @@ export default function Home() {
   */
   const handleNodePress = (node) => {
     if (node.status === 'Locked') {
+      sounds.tap();
       return;
     }
 
+    sounds.whoosh();
     const moduleId = getDefaultModuleId(node.title);
+    const country = node.title;
+    const startupTaken = Boolean(node.startupTaken);
+    const startup = node.startupAssessment;
 
-    router.push({
-      pathname: '/lesson',
-      params: {
-        country: node.title,
-        module: moduleId,
-      },
-    });
+    // Determine whether every topic of this module is fully completed.
+    const topics = getCountryTopics(country, moduleId) ?? [];
+    let allTopicsComplete = true;
+    for (const topic of topics) {
+      const progress = getTopicProgress(lessonProgress, country, topic);
+      if (progress.total === 0 || progress.count < progress.total) {
+        allTopicsComplete = false;
+        break;
+      }
+    }
+
+    if (!startupTaken) {
+      // Startup diagnostic not taken yet — take it first.
+      router.push({
+        pathname: '/quiz',
+        params: { mode: 'startup', country, module: moduleId },
+      });
+    } else if (!allTopicsComplete) {
+      // Startup taken, topics incomplete — start personalized lessons.
+      router.push({
+        pathname: '/lesson',
+        params: { country, module: moduleId },
+      });
+    } else {
+      // Startup taken, all topics complete — take the final assessment.
+      router.push({
+        pathname: '/quiz',
+        params: { mode: 'final', country, module: moduleId },
+      });
+    }
   };
 
+  /*
+  |--------------------------------------------------------------------------
+  | CALCULATE ACTIVE MISSION
+  |--------------------------------------------------------------------------
+  */
+  const currentMissionId = useMemo(() => {
+    if (!missionCatalog?.length) return 'mission-1';
+    if (!lessonProgress && !claimedMissions.length) return 'mission-1';
+
+    for (const mission of missionCatalog) {
+      if (isMissionClaimed(mission.id, claimedMissions)) {
+        continue;
+      }
+
+      const missionCountry = getCountryForModule(mission.moduleId) || PROGRESS_COUNTRY;
+
+      // Same rule the map uses, so the "Continue" card and the node highlight
+      // can never point at different missions.
+      if (!isMissionComplete(mission, lessonProgress, missionCountry, claimedMissions)) {
+        return String(mission.id);
+      }
+    }
+
+    return String(missionCatalog[missionCatalog.length - 1].id);
+  }, [lessonProgress, claimedMissions]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | MISSION PROGRESS (real values, no hardcoded percentages)
+  |--------------------------------------------------------------------------
+  */
+  const missionProgress = useMemo(
+    () =>
+      computeMissionProgress(missionCatalog, lessonProgress, claimedMissions),
+    [lessonProgress, claimedMissions],
+  );
+
+  const currentMissionCountry = useMemo(() => {
+    const mission = missionCatalog.find((item) => item.id === currentMissionId);
+    return mission ? getCountryForModule(mission.moduleId) : PROGRESS_COUNTRY;
+  }, [currentMissionId]);
+
+  /*
+   * CONTINUE CARD: one personalized next step for the current map node,
+   * following the same order as a node press: placement check first, then
+   * the engine's recommended lesson, then the final assessment.
+   */
+  const continueCard = useMemo(() => {
+    const country = currentPlaceNode?.title || currentMissionCountry;
+    const moduleId = currentPlaceNode?.moduleId || getDefaultModuleId(country);
+    const moduleLabel = getModuleLabel(country, moduleId) || 'Module 1';
+    const startupAssessment = startupAssessments[moduleId] ?? null;
+
+    if (!startupAssessment?.takenAt) {
+      return {
+        label: 'START WITH A QUICK CHECK',
+        title: `${country} placement check`,
+        meta: 'Tailors your lessons to you',
+        button: 'Start',
+        route: { pathname: '/quiz', params: { mode: 'startup', country, module: moduleId } },
+      };
+    }
+
+    const target = getModuleLearningTarget({
+      country,
+      moduleId,
+      lessonProgress,
+      lastPlayedTopic,
+      startupAssessment,
+    });
+
+    if (!target) {
+      return {
+        label: 'CONTINUE LEARNING',
+        title: country,
+        meta: moduleLabel,
+        button: 'Open',
+        route: { pathname: '/lesson', params: { country, module: moduleId } },
+      };
+    }
+
+    if (target.moduleComplete) {
+      return {
+        label: 'FINAL ASSESSMENT',
+        title: `${country} final quiz`,
+        meta: `Score ${NODE_PASS_PERCENTAGE}% to unlock the next stop`,
+        button: 'Quiz',
+        route: { pathname: '/quiz', params: { mode: 'final', country, module: moduleId } },
+      };
+    }
+
+    const copy = getReasonCopy(target.topicReason);
+    const step = Math.min(target.completedSubLessons + 1, target.totalSubLessons || 1);
+
+    return {
+      label: target.topicReason === 'resume'
+        ? 'CONTINUE LEARNING'
+        : (copy?.label ?? 'Continue learning').toUpperCase(),
+      title: target.topicTitle,
+      meta: `${moduleLabel} • ${step} / ${target.totalSubLessons}`,
+      button: target.completedSubLessons > 0 ? 'Continue' : 'Start',
+      route: {
+        pathname: '/sublesson',
+        params: {
+          country,
+          module: moduleId,
+          topicId: target.topicId,
+          subLessonIndex: String(target.subLessonIndex),
+        },
+      },
+    };
+  }, [currentPlaceNode, currentMissionCountry, lessonProgress, lastPlayedTopic, startupAssessments]);
   /*
   |--------------------------------------------------------------------------
   | PLAYER
@@ -462,10 +1037,16 @@ export default function Home() {
     level: progress?.level ?? 1,
     xp: progress?.xp ?? 0,
     maxXp: 1800,
-    coins: 540,
-    hearts: 5,
+    coins: progress?.coins ?? 0,
+    hearts: progress?.hearts ?? 5,
     streak: progress?.streak ?? 0,
   };
+
+  // Avatar depends on the player's gender (falls back to male).
+  const avatarEmoji = session?.user?.gender === 'female' ? '👧🏽' : '👦🏽';
+  // The traveler on the map nodes follows the same gender (falls back to male).
+  const travelerEmoji =
+    session?.user?.gender === 'female' ? '🚶🏽‍♀️‍➡️' : '🚶🏽‍➡️';
 
   return (
     <SafeAreaView
@@ -477,284 +1058,405 @@ export default function Home() {
             MAP
         ========================================================= */}
         <View style={styles.mapArea}>
-          <ScrollView
-            horizontal
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            showsHorizontalScrollIndicator={false}
-            showsVerticalScrollIndicator={false}
-            bounces={true}
-            nestedScrollEnabled={true}
-            directionalLockEnabled={true}
+          <View
+            style={[
+              styles.mapScaleContainer,
+              {
+                width: mapLayout.width,
+                height: mapLayout.contentHeight,
+              },
+            ]}
           >
-            {/* =====================================================
-                2.5x HORIZONTAL MAP
-            ===================================================== */}
-            <View
+          <View
+            pointerEvents="none"
+            style={[
+              styles.mapBackgroundLayer,
+              {
+                width: mapLayout.width,
+                height: mapLayout.contentHeight,
+              },
+            ]}
+          >
+            <Image
+              source={mapBackgroundImage}
               style={[
-                styles.mapScaleContainer,
+                styles.mapBackground,
                 {
-                  width: MAP_WIDTH,
-                  height: MAP_HEIGHT,
+                  width: mapLayout.width,
+                  height: mapLayout.contentHeight,
                 },
               ]}
-            >
-              {/* ===================================================
-                  FULL MAP BACKGROUND
-              =================================================== */}
+              resizeMode="cover"
+              blurRadius={3}
+            />
+            <View
+              pointerEvents="none"
+              style={styles.darkOverlay}
+            />
+          </View>
+
+          <Animated.View
+            style={[
+              styles.nodeLayer,
+              {
+                width: mapLayout.width,
+                height: mapLayout.contentHeight,
+              },
+              mapAdvanceStyle,
+            ]}
+          >
               <View
                 pointerEvents="none"
-                style={[
-                  styles.mapBackgroundLayer,
-                  {
-                    width: MAP_WIDTH,
-                    height: MAP_HEIGHT,
-                  },
-                ]}
+                style={StyleSheet.absoluteFill}
               >
-                <Image
-                  source={mapBackgroundImage}
-                  style={[
-                    styles.mapBackground,
-                    {
-                      width: MAP_WIDTH,
-                      height: MAP_HEIGHT,
-                    },
-                  ]}
-                  resizeMode="cover"
-                  blurRadius={3}
-                />
-                <View
-                  pointerEvents="none"
-                  style={styles.darkOverlay}
-                />
+                <Svg
+                  width={mapLayout.width}
+                  height={mapLayout.contentHeight}
+                >
+                  <Path
+                    d={roadPath}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.15)"
+                    strokeWidth={20}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <Path
+                    d={roadPath}
+                    fill="none"
+                    stroke="#FFFFFF"
+                    strokeWidth={10}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <Path
+                    d={roadPath}
+                    fill="none"
+                    stroke={COLORS.blue}
+                    strokeWidth={3}
+                    strokeDasharray="12 14"
+                    strokeLinecap="round"
+                  />
+                  {!!travelledPath && (
+                    <Path
+                      d={travelledPath}
+                      fill="none"
+                      stroke={COLORS.green}
+                      strokeWidth={6}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  )}
+                </Svg>
               </View>
 
-              {/* ===================================================
-                  NODE + ROAD LAYER
-              =================================================== */}
-              <Animated.View
-                style={[
-                  styles.nodeLayer,
-                  {
-                    width: MAP_WIDTH,
-                    height: MAP_HEIGHT,
-                  },
-                ]}
-              >
-                  {/* =================================================
-                      ROAD
-                  ================================================= */}
+              {places.map((node, nodeIndex) => {
+                const nodeX = getNodeX(node, mapLayout);
+                const nodeY = getNodeY(node, mapLayout);
+                const nodeSize = getNodeSize(nodeIndex, currentPlaceIndex);
+                const isCurrent = node.status === 'current';
+                const isCompleted = node.status === 'completed';
+                const isLocked = node.status === 'Locked';
+                const mirrored = isNodeMirrored(node);
+                /* Perspective: small far away (top), big close to us (bottom).
+                 * The depth follows the shifted position, so a stop grows as
+                 * the map advances towards it. */
+                const depth = getNodeShiftedDepth(node, mapRowShift);
+                const NodeContainer = isCurrent ? Animated.View : View;
+
+                return (
                   <View
-                    pointerEvents="none"
-                    style={StyleSheet.absoluteFill}
+                    key={node.id}
+                    style={[
+                      styles.nodeWrapper,
+                      {
+                        top: nodeY - NODE_PILL_HEIGHT / 2,
+                        left: nodeX - NODE_PILL_WIDTH / 2,
+                        transform: [{ scale: mapLayout.scale * depth }],
+                      },
+                    ]}
                   >
-                    <Svg
-                      width={MAP_WIDTH}
-                      height={MAP_HEIGHT}
+                    <NodeContainer
+                      style={isCurrent ? pulsingStyle : undefined}
                     >
-                      <Path
-                        d={roadPath}
-                        fill="none"
-                        stroke="rgba(255,255,255,0.15)"
-                        strokeWidth={20}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <Path
-                        d={roadPath}
-                        fill="none"
-                        stroke="#FFFFFF"
-                        strokeWidth={10}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <Path
-                        d={roadPath}
-                        fill="none"
-                        stroke={COLORS.blue}
-                        strokeWidth={3}
-                        strokeDasharray="12 14"
-                        strokeLinecap="round"
-                      />
-                    </Svg>
-                  </View>
-
-                  {/* =================================================
-                      MISSION NODES
-                  ================================================= */}
-                  {NODES.map((node, nodeIndex) => {
-                    const nodeX = getNodeX(node);
-                    const nodeY = getNodeY(node);
-                    const nodeSize = getNodeSize(nodeIndex);
-                    const isCurrent = node.status === 'current';
-                    const NodeContainer = isCurrent ? Animated.View : View;
-
-                    return (
-                      <View
-                        key={node.id}
-                        style={[
-                          styles.nodeWrapper,
+                      <Pressable
+                        onPress={() => handleNodePress(node)}
+                        disabled={isLocked}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${node.title}, ${
+                          isCurrent ? 'current stop' : isCompleted ? 'completed' : 'locked'
+                        }`}
+                        style={({ pressed }) => [
+                          styles.nodePill,
                           {
-                            top: nodeY,
-                            left: nodeX - 65,
+                            width: NODE_PILL_WIDTH,
+                            height: NODE_PILL_HEIGHT,
                           },
+                          mirrored && styles.nodePillMirrored,
+                          node.status === 'completed' &&
+                            styles.nodePillCompleted,
+                          isCurrent && styles.nodePillCurrent,
+                          node.status === 'Locked' && styles.nodePillLocked,
+                          pressed &&
+                            node.status !== 'Locked' &&
+                            styles.nodePressed,
                         ]}
                       >
-                        {/* ==========================================
-                            LESSON CARD
-                        ========================================== */}
-                        <View
-                          style={[
-                            styles.lessonCard,
-                            isCurrent && styles.lessonCardCurrent,
-                          ]}
-                        >
-                          {node.status !== 'Locked' && (
-                            <Text
-                              style={[
-                                styles.statusText,
-                                isCurrent
-                                  ? styles.currentText
-                                  : styles.completedText,
-                              ]}
-                            >
-                              {isCurrent ? 'CURRENT' : 'COMPLETED'}
-                            </Text>
-                          )}
-                          <Text
-                            style={styles.lessonTitle}
-                            numberOfLines={1}
-                          >
-                            {node.title}
-                          </Text>
-                          <Text
-                            style={styles.lessonDescription}
-                            numberOfLines={1}
-                          >
-                            {node.desc}
-                          </Text>
-                        </View>
-
-                        {/* ==========================================
-                            NODE BUTTON
-                        ========================================== */}
-                        <NodeContainer
-                          style={isCurrent ? pulsingStyle : undefined}
-                        >
-                          <Pressable
-                            onPress={() => handleNodePress(node)}
-                            disabled={node.status === 'Locked'}
-                            style={({ pressed }) => [
-                              styles.nodeButton,
+                        <View style={styles.nodeCircle}>
+                          <ImageBackground
+                            source={node.image}
+                            style={[
+                              styles.nodeImageBackground,
                               {
                                 width: nodeSize,
                                 height: nodeSize,
                                 borderRadius: nodeSize / 2,
+                                backgroundColor: COLORS.gray,
                               },
-                              node.status === 'completed' &&
-                                styles.nodeCompleted,
+                              isCompleted && styles.nodeCompleted,
                               isCurrent && styles.nodeCurrent,
-                              node.status === 'Locked' && styles.nodeLocked,
-                              pressed &&
-                                node.status !== 'Locked' &&
-                                styles.nodePressed,
+                              isLocked && styles.nodeLocked,
+                            ]}
+                            imageStyle={[
+                              styles.nodeImageStyle,
+                              { borderRadius: nodeSize / 2 - 3 },
                             ]}
                           >
-                            <ImageBackground
-                              source={node.image}
+                            {isLocked && (
+                              <View style={styles.nodeImageOverlayLocked} />
+                            )}
+                          </ImageBackground>
+                          {/* Status badge on the photo: done / stop number / locked. */}
+                          <View
+                            style={[
+                              styles.nodeBadge,
+                              isCompleted && styles.nodeBadgeCompleted,
+                              isCurrent && styles.nodeBadgeCurrent,
+                              isLocked && styles.nodeBadgeLocked,
+                            ]}
+                          >
+                            <Text
                               style={[
-                                styles.nodeImageBackground,
-                                { backgroundColor: COLORS.gray },
-                              ]}
-                              imageStyle={[
-                                styles.nodeImageStyle,
-                                {
-                                  borderRadius: nodeSize / 2 - 3,
-                                  opacity: 0.65,
-                                },
+                                styles.nodeBadgeText,
+                                isLocked && styles.nodeBadgeTextLocked,
                               ]}
                             >
-                              <View
-                                style={[
-                                  styles.nodeImageOverlay,
-                                  node.status === 'Locked' &&
-                                    styles.nodeImageOverlayLocked,
-                                ]}
-                              >
-                                {node.status === 'Locked' ? (
-                                  <Text style={styles.lockIcon}>🔒</Text>
-                                ) : (
-                                  <Text style={styles.nodeNumber}>
-                                    {node.id}
-                                  </Text>
-                                )}
-                              </View>
-                            </ImageBackground>
-                            {isCurrent && (
-                              <View style={styles.currentDot} />
-                            )}
-                          </Pressable>
-                        </NodeContainer>
-                      </View>
-                    );
-                  })}
-
-                  {/* =================================================
-                      TRAVELER & TOUCHABLE SPEECH BUBBLE
-                  ================================================= */}
-                  {currentPlaceNode && (() => {
-                    const nodeX = getNodeX(currentPlaceNode);
-                    const nodeY = getNodeY(currentPlaceNode);
-
-                    return (
-                      <View
-                        pointerEvents="box-none"
-                        style={[
-                          styles.travelerContainer,
-                          {
-                            left: nodeX - 65,
-                            top: nodeY - 130,
-                          },
-                        ]}
-                      >
-                        <Animated.View style={bubbleAnimStyle}>
-                          <Pressable
-                            onPress={() => handleBubblePress(currentPlaceNode)}
-                            style={({ pressed }) => [
-                              styles.speechBubble,
-                              pressed && styles.speechBubblePressed,
-                            ]}
-                          >
-                            <Text style={styles.speechTextHeader}>
-                              <Text style={styles.speechTextHighlight}>
-                                {currentPlaceNode.title}{' '}
-                                {getFlagEmoji(currentPlaceNode.title)}
-                              </Text>
+                              {isCompleted ? '✓' : isLocked ? '🔒' : node.id}
                             </Text>
-                            <Text style={styles.speechText}>
-                              {getTravelerDialogue(currentPlaceNode)}
-                            </Text>
-                            <Text style={styles.tapAudioHint}>🔊 Tap voice!</Text>
-                            <View style={styles.bubblePointer} />
-                          </Pressable>
-                        </Animated.View>
+                          </View>
+                        </View>
 
-                        <Animated.View
-                          pointerEvents="none"
+                        <View
                           style={[
-                            styles.travelerCharacter,
-                            travelerAnimStyle,
+                            styles.nodePillInfo,
+                            mirrored && styles.nodePillInfoMirrored,
                           ]}
                         >
-                          <Text style={styles.travelerEmoji}>🚶‍➡️</Text>
-                        </Animated.View>
+                          <Text
+                            style={[
+                              styles.statusText,
+                              isCurrent && styles.currentText,
+                              isCompleted && styles.completedText,
+                              isLocked && styles.lockedText,
+                              mirrored && styles.textRight,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {isCurrent
+                              ? 'YOU ARE HERE'
+                              : isCompleted
+                                ? 'COMPLETED'
+                                : `STOP ${node.id}`}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.lessonTitle,
+                              isLocked && styles.lessonTitleLocked,
+                              mirrored && styles.textRight,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {node.title}
+                          </Text>
+                          {isCurrent && node.lessonsTotal > 0 ? (
+                            <View
+                              style={styles.nodeProgress}
+                              accessibilityLabel={`${node.lessonsDone} of ${node.lessonsTotal} lessons done`}
+                            >
+                              <View style={styles.nodeProgressTrack}>
+                                <View
+                                  style={[
+                                    styles.nodeProgressFill,
+                                    {
+                                      width: `${Math.max(
+                                        6,
+                                        (node.lessonsDone / node.lessonsTotal) * 100,
+                                      )}%`,
+                                    },
+                                  ]}
+                                />
+                              </View>
+                              <Text style={styles.nodeProgressText}>
+                                {node.lessonsDone}/{node.lessonsTotal}
+                              </Text>
+                            </View>
+                          ) : (
+                            <Text
+                              style={[
+                                styles.lessonDescription,
+                                isLocked && styles.lessonDescriptionLocked,
+                                mirrored && styles.textRight,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {node.desc}
+                            </Text>
+                          )}
+                        </View>
+                      </Pressable>
+                    </NodeContainer>
+                  </View>
+                );
+              })}
+
+              {currentPlaceNode && (() => {
+                const currentDepth = getNodeShiftedDepth(
+                  currentPlaceNode,
+                  mapRowShift,
+                );
+                /* The traveler stands on the circle of the current stop. */
+                const nodeX = getNodeAnchorX(
+                  currentPlaceNode,
+                  mapLayout,
+                  currentDepth,
+                );
+                const nodeY = getNodeY(currentPlaceNode, mapLayout);
+
+                /* The traveler stands right on top of its stop. The bubble
+                 * goes above him, or below him when there is not enough room
+                 * left inside the map band (top rows). */
+                const pillHalfHeight =
+                  (NODE_PILL_HEIGHT * mapLayout.scale * currentDepth) / 2;
+                /* The traveler is drawn at the same depth as his stop. */
+                const travelerScale = mapLayout.scale * currentDepth;
+                const characterBottom = nodeY - pillHalfHeight - 4;
+                const bubbleBelow =
+                  characterBottom - mapLayout.top < BUBBLE_MIN_SPACE;
+
+                /* Only the bubble is kept inside the screen: the traveler stays
+                 * right over the stop icon and the pointer slides along the
+                 * bubble edge so it always points at him. */
+                const containerLeft = clampX(
+                  nodeX - TRAVELER_WIDTH / 2,
+                  TRAVELER_WIDTH,
+                );
+                const iconOffset = nodeX - containerLeft;
+                const pointerLeft = Math.max(
+                  BUBBLE_POINTER_INSET,
+                  Math.min(
+                    TRAVELER_WIDTH - BUBBLE_POINTER_INSET - BUBBLE_POINTER_SIZE,
+                    iconOffset - BUBBLE_POINTER_SIZE / 2,
+                  ),
+                );
+
+                const bubble = (
+                  <Animated.View
+                    style={[
+                      bubbleAnimStyle,
+                      bubbleBelow && styles.bubbleStacked,
+                    ]}
+                  >
+                    <Pressable
+                      onPress={() => {
+                        setBubbleTick((tick) => tick + 1);
+                        handleBubblePress(currentPlaceNode);
+                      }}
+                      style={({ pressed }) => [
+                        styles.speechBubble,
+                        pressed && styles.speechBubblePressed,
+                      ]}
+                    >
+                      <Text style={styles.speechTextHeader}>
+                        <Text style={styles.speechTextHighlight}>
+                          {currentPlaceNode.title}{' '}
+                          {getFlagEmoji(currentPlaceNode.title)}
+                        </Text>
+                      </Text>
+                      <Text style={styles.speechText}>
+                        {getTravelerDialogue(currentPlaceNode)}
+                      </Text>
+                      <Text style={styles.tapAudioHint}>🔊 Tap voice!</Text>
+                      <View
+                        style={[
+                          bubbleBelow
+                            ? styles.bubblePointerUp
+                            : styles.bubblePointerDown,
+                          { left: pointerLeft },
+                        ]}
+                      />
+                    </Pressable>
+                  </Animated.View>
+                );
+
+                const character = (
+                  <Pressable
+                    onPress={() => {
+                      sounds.tap();
+                      setBubbleDismissedFor(
+                        bubbleVisible ? currentPlaceNode.id : null,
+                      );
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      bubbleVisible ? 'Hide travel note' : 'Show travel note'
+                    }
+                    hitSlop={8}
+                    style={[
+                      styles.travelerCharacter,
+                      {
+                        marginLeft: iconOffset - TRAVELER_ICON_WIDTH / 2,
+                        transform: [{ scale: travelerScale }],
+                      },
+                    ]}
+                  >
+                    <Text style={styles.travelerEmoji}>
+                      {travelerEmoji}
+                    </Text>
+                    {!bubbleVisible && (
+                      <View style={styles.travelerHint}>
+                        <Text style={styles.travelerHintText}>💬</Text>
                       </View>
-                    );
-                  })()}
-              </Animated.View>
-            </View>
-          </ScrollView>
+                    )}
+                  </Pressable>
+                );
+
+                return (
+                  <View
+                    pointerEvents="box-none"
+                    style={[
+                      styles.travelerContainer,
+                      {
+                        left: containerLeft,
+                        ...(bubbleBelow
+                          ? {
+                            top:
+                              characterBottom -
+                              TRAVELER_CHARACTER_HEIGHT,
+                          }
+                          : {
+                            bottom:
+                              mapLayout.contentHeight - characterBottom,
+                          }),
+                      },
+                    ]}
+                  >
+                    {bubbleBelow ? character : bubbleVisible && bubble}
+                    {bubbleBelow ? bubbleVisible && bubble : character}
+                  </View>
+                );
+              })()}
+          </Animated.View>
+        </View>
         </View>
 
         {/* =========================================================
@@ -777,7 +1479,7 @@ export default function Home() {
             ]}
           >
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>👦🏽</Text>
+              <Text style={styles.avatarText}>{avatarEmoji}</Text>
             </View>
             <View style={styles.profileText}>
               <Text style={styles.greeting}>Bonjour,</Text>
@@ -805,32 +1507,65 @@ export default function Home() {
           style={[
             styles.progressRow,
             {
-              top: 80 + insets.top,
+              top: PROGRESS_ROW_TOP + insets.top,
             },
           ]}
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="View journey progress"
-            onPress={() => router.push('/journey')}
+            accessibilityLabel={`View today's challenges. New set in ${challengeCountdown.text}.`}
+            onPress={() => router.push('/challenge')}
             style={({ pressed }) => [
               styles.progressPanel,
               pressed && styles.buttonPressed,
             ]}
           >
             <View style={styles.progressCard}>
-              <Text style={styles.cardHeading}>🗺️ Journey</Text>
-              <View style={styles.progressBackground}>
-                <View style={[styles.progressFillBlue, { width: '30%' }]} />
+              <View style={styles.cardHeadingRow}>
+                <Text
+                  style={styles.cardHeading}
+                  numberOfLines={1}
+                >
+                  🗺️ Challenges
+                </Text>
+                <View
+                  accessible
+                  accessibilityLabel={`New challenges in ${challengeCountdown.text}`}
+                  style={styles.timerPill}
+                >
+                  <Text style={styles.timerPillText}>
+                    ⏳ {challengeCountdown.text}
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.progressPercentage}>30%</Text>
+              <View style={styles.progressBackground}>
+                <View
+                  style={[
+                    styles.progressFillBlue,
+                    { width: `${challengeOverview?.percent ?? 0}%` },
+                  ]}
+                />
+              </View>
+              <Text style={styles.progressPercentage}>
+                {challengeOverview
+                  ? `${challengeOverview.completed}/${challengeOverview.total} cleared`
+                  : 'Daily quest'}
+              </Text>
             </View>
           </Pressable>
 
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="View available missions and challenges"
-            onPress={() => router.push('/mission')}
+            onPress={() => {
+              router.push({
+                pathname: '/journey',
+                params: {
+                  missionId: currentMissionId,
+                  country: currentMissionCountry,
+                },
+              });
+            }}
             style={({ pressed }) => [
               styles.progressPanel,
               pressed && styles.buttonPressed,
@@ -839,9 +1574,22 @@ export default function Home() {
             <View style={styles.progressCard}>
               <Text style={styles.cardHeading}>🎯 Missions</Text>
               <View style={styles.progressBackground}>
-                <View style={[styles.progressFillBlue, { width: '30%' }]} />
+                <View
+                  style={[
+                    styles.progressFillBlue,
+                    { width: `${missionProgress.percent}%` },
+                  ]}
+                />
               </View>
-              <Text style={styles.progressPercentage}>30%</Text>
+              <Text
+                accessible
+                accessibilityLabel={`${missionProgress.completed} of ${missionProgress.total} missions completed`}
+                style={styles.progressPercentage}
+              >
+                {missionProgress.total > 0
+                  ? `${missionProgress.completed}/${missionProgress.total} • ${missionProgress.percent}%`
+                  : '0%'}
+              </Text>
             </View>
           </Pressable>
         </View>
@@ -859,32 +1607,30 @@ export default function Home() {
         >
           <View style={styles.continueCard}>
             <View style={styles.continueInfo}>
-              <Text style={styles.continueLabel}>CONTINUE LEARNING</Text>
-              <Text style={styles.continueTitle} numberOfLines={1}>
-                {currentPlaceNode?.title || 'Ivory Coast'}
+              <Text style={styles.continueLabel} numberOfLines={1}>
+                {continueCard.label}
               </Text>
-              <Text style={styles.continueMeta}>Module 1 • Lesson 3 / 10</Text>
+              <Text style={styles.continueTitle} numberOfLines={1}>
+                {continueCard.title}
+              </Text>
+              <Text style={styles.continueMeta} numberOfLines={1}>
+                {continueCard.meta}
+              </Text>
             </View>
             <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: '/lesson',
-                  params: {
-                    country: currentPlaceNode?.title || 'Canada',
-                    module: getDefaultModuleId(
-                      currentPlaceNode?.title || 'Canada',
-                    ),
-                    topicId: currentTopic?.id,
-                  },
-                })
-              }
+              onPress={() => {
+                sounds.whoosh();
+                router.push(continueCard.route);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`${continueCard.button}: ${continueCard.title}`}
               style={({ pressed }) => [
                 styles.continueButton,
                 pressed && styles.buttonPressed,
               ]}
             >
               <Text style={styles.continueButtonText}>▶</Text>
-              <Text style={styles.continueButtonLabel}>Continue</Text>
+              <Text style={styles.continueButtonLabel}>{continueCard.button}</Text>
             </Pressable>
           </View>
         </View>
@@ -893,11 +1639,6 @@ export default function Home() {
   );
 }
 
-/*
-|--------------------------------------------------------------------------
-| STAT COMPONENT
-|--------------------------------------------------------------------------
-*/
 function Stat({ icon, value, sub }) {
   return (
     <View style={styles.stat}>
@@ -910,11 +1651,6 @@ function Stat({ icon, value, sub }) {
   );
 }
 
-/*
-|--------------------------------------------------------------------------
-| STYLES
-|--------------------------------------------------------------------------
-*/
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -926,12 +1662,7 @@ const styles = StyleSheet.create({
   },
   mapArea: {
     flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 0,
+    overflow: 'hidden',
   },
   mapScaleContainer: {
     position: 'relative',
@@ -960,65 +1691,119 @@ const styles = StyleSheet.create({
   },
   nodeWrapper: {
     position: 'absolute',
-    width: 130,
+    width: NODE_PILL_WIDTH,
     alignItems: 'center',
+    justifyContent: 'center',
     zIndex: 10,
   },
-  lessonCard: {
-    minWidth: isSmallScreen ? 105 : 120,
-    maxWidth: isSmallScreen ? 130 : 150,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 14,
+  nodePill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5,
+    borderRadius: 999,
+    paddingHorizontal: NODE_PILL_PADDING,
+    backgroundColor: COLORS.white,
+    borderWidth: 2,
+    borderColor: 'rgba(226,232,240,1)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.22,
     shadowRadius: 5,
     elevation: 6,
   },
-  lessonCardCurrent: {
-    borderWidth: 2,
+  nodePillMirrored: {
+    flexDirection: 'row-reverse',
+  },
+  /* Every stop shares the same white pill; the state shows in the border,
+   * the badge and the label colour only. */
+  nodePillCompleted: {
+    borderColor: COLORS.green,
+  },
+  nodePillCurrent: {
+    borderWidth: 3,
     borderColor: COLORS.blue,
+    shadowColor: COLORS.blue,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 14,
+    elevation: 12,
+  },
+  nodePillLocked: {
+    borderColor: '#CBD5E1',
+  },
+  nodeCircle: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  nodePillInfo: {
+    flex: 1,
+    marginLeft: NODE_PILL_PADDING,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  nodePillInfoMirrored: {
+    marginLeft: 0,
+    marginRight: NODE_PILL_PADDING,
+  },
+  textRight: {
+    textAlign: 'right',
   },
   statusText: {
     fontSize: 8,
     fontWeight: '900',
     letterSpacing: 0.7,
-    marginBottom: 2,
+    marginBottom: 1,
+    textAlign: 'left',
   },
   completedText: {
     color: COLORS.greenDark,
   },
   currentText: {
-    color: COLORS.blueDark,
+    color: COLORS.blue,
+  },
+  lockedText: {
+    color: '#94A3B8',
   },
   lessonTitle: {
     color: COLORS.dark,
     fontSize: isSmallScreen ? 12 : 13,
     fontWeight: '900',
-    textAlign: 'center',
+    textAlign: 'left',
+  },
+  lessonTitleLocked: {
+    color: '#475569',
   },
   lessonDescription: {
     color: COLORS.muted,
     fontSize: 9,
     fontWeight: '600',
     marginTop: 1,
-    textAlign: 'center',
+    textAlign: 'left',
   },
-  nodeButton: {
-    overflow: 'hidden',
+  lessonDescriptionLocked: {
+    color: '#94A3B8',
+  },
+  nodeProgress: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderBottomWidth: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
+    marginTop: 3,
+  },
+  nodeProgressTrack: {
+    flex: 1,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  nodeProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: COLORS.blue,
+  },
+  nodeProgressText: {
+    marginLeft: 5,
+    color: COLORS.blueDark,
+    fontSize: 9,
+    fontWeight: '900',
   },
   nodeImageBackground: {
     width: '100%',
@@ -1027,71 +1812,67 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   nodeImageStyle: {},
-  nodeImageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   nodeImageOverlayLocked: {
-    backgroundColor: 'rgba(15,23,42,0.8)',
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.45)',
   },
   nodeCompleted: {
-    backgroundColor: COLORS.green,
-    borderColor: COLORS.greenDark,
+    borderWidth: 3,
+    borderColor: COLORS.green,
   },
   nodeCurrent: {
-    backgroundColor: COLORS.blue,
-    borderColor: COLORS.blueDark,
-    borderWidth: 4,
-    borderBottomWidth: 7,
+    borderWidth: 3,
+    borderColor: COLORS.blue,
     shadowColor: COLORS.blue,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 12,
   },
   nodeLocked: {
-    backgroundColor: COLORS.gray,
-    borderColor: COLORS.grayDark,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
   },
   nodePressed: {
     opacity: 0.85,
     transform: [{ scale: 0.95 }],
   },
-  nodeNumber: {
-    color: COLORS.white,
-    fontSize: isSmallScreen ? 18 : 21,
-    fontWeight: '900',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  lockIcon: {
-    fontSize: isSmallScreen ? 16 : 19,
-  },
-  currentDot: {
+  nodeBadge: {
     position: 'absolute',
-    top: -5,
-    right: 0,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: COLORS.yellow,
+    bottom: -3,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 2,
     borderColor: COLORS.white,
     zIndex: 10,
   },
-
-  /*
-  |--------------------------------------------------------------------------
-  | TRAVELER & BUBBLE
-  |--------------------------------------------------------------------------
-  */
+  nodeBadgeCompleted: {
+    backgroundColor: COLORS.green,
+  },
+  nodeBadgeCurrent: {
+    backgroundColor: COLORS.yellow,
+  },
+  nodeBadgeLocked: {
+    backgroundColor: '#64748B',
+  },
+  nodeBadgeText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  nodeBadgeTextLocked: {
+    fontSize: 9,
+  },
   travelerContainer: {
     position: 'absolute',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     zIndex: 80,
-    width: 170,
+    width: TRAVELER_WIDTH,
   },
   speechBubble: {
     backgroundColor: COLORS.white,
@@ -1105,9 +1886,13 @@ const styles = StyleSheet.create({
     elevation: 8,
     marginBottom: 8,
     alignItems: 'center',
-    maxWidth: 170,
+    width: TRAVELER_WIDTH,
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
+  },
+  /* Used when the bubble has to render under the traveler (top rows). */
+  bubbleStacked: {
+    marginTop: 8,
   },
   speechBubblePressed: {
     transform: [{ scale: 0.95 }],
@@ -1135,34 +1920,65 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 4,
   },
-  bubblePointer: {
+  /* Two separate pointers (no `undefined` overrides, which web keeps). Their
+   * `left` is set inline so the tip points at the traveler. */
+  bubblePointerDown: {
     position: 'absolute',
-    bottom: -6,
+    bottom: -8,
     width: 0,
     height: 0,
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
+    borderLeftWidth: BUBBLE_POINTER_SIZE / 2,
+    borderRightWidth: BUBBLE_POINTER_SIZE / 2,
     borderTopWidth: 8,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     borderTopColor: COLORS.white,
   },
+  /* Flipped pointer for the bubble rendered under the traveler. */
+  bubblePointerUp: {
+    position: 'absolute',
+    top: -8,
+    width: 0,
+    height: 0,
+    borderLeftWidth: BUBBLE_POINTER_SIZE / 2,
+    borderRightWidth: BUBBLE_POINTER_SIZE / 2,
+    borderBottomWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: COLORS.white,
+  },
   travelerCharacter: {
+    width: TRAVELER_ICON_WIDTH,
+    height: TRAVELER_CHARACTER_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
   },
   travelerEmoji: {
-    fontSize: 40,
+    fontSize: 34,
     textShadowColor: 'rgba(0,0,0,0.3)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 3,
   },
-
-  /*
-  |--------------------------------------------------------------------------
-  | HUD
-  |--------------------------------------------------------------------------
-  */
+  /* Small "tap me" cue shown while the speech bubble is tucked away. */
+  travelerHint: {
+    position: 'absolute',
+    top: -6,
+    right: -14,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  travelerHintText: {
+    fontSize: 12,
+  },
   topHud: {
     position: 'absolute',
     left: 14,
@@ -1241,12 +2057,6 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '700',
   },
-
-  /*
-  |--------------------------------------------------------------------------
-  | PROGRESS PANEL
-  |--------------------------------------------------------------------------
-  */
   progressPanel: {
     flex: 1,
   },
@@ -1274,6 +2084,28 @@ const styles = StyleSheet.create({
     fontSize: isSmallScreen ? 11 : 13,
     fontWeight: '900',
     marginBottom: 8,
+    flexShrink: 1,
+  },
+  cardHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  timerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DBEAFE',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexShrink: 0,
+  },
+  timerPillText: {
+    color: COLORS.blueDark,
+    fontSize: isSmallScreen ? 9 : 10,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
   },
   progressBackground: {
     height: 4,
@@ -1293,12 +2125,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: 6,
   },
-
-  /*
-  |--------------------------------------------------------------------------
-  | CONTINUE CARD
-  |--------------------------------------------------------------------------
-  */
   continueContainer: {
     position: 'absolute',
     left: 14,

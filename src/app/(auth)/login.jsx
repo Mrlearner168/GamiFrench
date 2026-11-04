@@ -1,10 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link, useRouter } from 'expo-router';
+import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
     ActivityIndicator,
-    Image, 
+    Image,
     Keyboard,
     KeyboardAvoidingView,
     Platform,
@@ -13,26 +13,36 @@ import {
     StyleSheet,
     Text,
     TextInput,
-    TouchableWithoutFeedback,
+    useWindowDimensions,
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
+import { PasswordVisibilityToggle } from '@/components/password-visibility-toggle';
+import { AdminDashboardLink } from '@/components/admin-dashboard-link';
+import { ServerWakeBanner } from '@/components/server-wake-banner';
 import { AuthServiceError } from '@/services/authService';
+import { useServerStatus } from '@/services/serverWarmup';
 import { useAuth } from '@/store/auth-context';
 
 const schema = z.object({
     email: z.string().trim().email('Enter a valid email address.'),
-    password: z.string().min(8, 'Password must be at least 8 characters.'),
+    // Sign-in only checks that a password was typed: the length rule belongs
+    // to registration, and the server decides whether the password is right.
+    password: z.string().min(1, 'Enter your password.'),
 });
 
 export default function Login() {
-    const router = useRouter();
     const { signIn } = useAuth();
     const [showPassword, setShowPassword] = useState(false);
     const [serverError, setServerError] = useState('');
-    
+    const { phase } = useServerStatus();
+    const { height } = useWindowDimensions();
+    // The logo used to be a fixed 250px circle that pushed the form below
+    // the fold on small phones; scale it with the screen instead.
+    const logoSize = Math.round(Math.min(160, Math.max(96, height * 0.18)));
+
     const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm({
         resolver: zodResolver(schema),
         defaultValues: { email: '', password: '' },
@@ -42,7 +52,7 @@ export default function Login() {
         Keyboard.dismiss();
         setServerError('');
         try {
-            await signIn(values);
+            await signIn({ ...values, email: values.email.trim() });
         } catch (error) {
             setServerError(error instanceof AuthServiceError ? error.message : 'Unable to sign in right now. Please try again.');
         }
@@ -50,99 +60,110 @@ export default function Login() {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <KeyboardAvoidingView 
-                style={styles.keyboardAvoid} 
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            <KeyboardAvoidingView
+                style={styles.keyboardAvoid}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-                    <ScrollView 
-                        contentContainerStyle={styles.scrollContainer}
-                        showsVerticalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        {/* Centered Header Section */}
-                        <View style={styles.header}>
-                            <View style={styles.brandMark}>
-                                <Image 
-                                    source={require('@/assets/images/icon.png')} 
-                                    style={styles.logoImage} 
-                                    resizeMode="cover"
-                                />
-                            </View>
-                            <Text style={styles.eyebrow}>GAMIFRENCH</Text>
-                            <Text style={styles.title}>Welcome back.</Text>
-                            <Text style={styles.subtitle}>A few minutes of French, every day.</Text>
-                        </View>
-
-                        {/* Form Section */}
-                        <View style={styles.form}>
-                            <Field 
-                                control={control} 
-                                name="email" 
-                                label="Email" 
-                                error={errors.email?.message} 
-                                autoCapitalize="none" 
-                                keyboardType="email-address"
-                                autoComplete="email"
-                                autoCorrect={false}
-                                spellCheck={false}
-                                editable={!isSubmitting}
+                {/* No TouchableWithoutFeedback wrapper: it swallowed scroll
+                  * gestures on Android and clicks on web. Dragging the
+                  * form dismisses the keyboard instead. */}
+                <ScrollView
+                    contentContainerStyle={styles.scrollContainer}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                >
+                    {/* Centered Header Section */}
+                    <View style={styles.header}>
+                        <View style={[styles.brandMark, { width: logoSize, height: logoSize, borderRadius: logoSize / 2 }]}>
+                            <Image 
+                                source={require('@/assets/images/icon.png')} 
+                                style={styles.logoImage} 
+                                resizeMode="cover"
                             />
-                            
-                            <Field 
-                                control={control} 
-                                name="password" 
-                                label="Password" 
-                                error={errors.password?.message} 
-                                secureTextEntry={!showPassword}
-                                autoCapitalize="none"
-                                autoComplete="password"
-                                autoCorrect={false}
-                                spellCheck={false}
-                                editable={!isSubmitting}
-                            >
-                                <Pressable 
-                                    onPress={() => setShowPassword((value) => !value)} 
-                                    accessibilityRole="button" 
-                                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                                    disabled={isSubmitting}
-                                >
-                                    <Text style={[styles.showPassword, isSubmitting && styles.disabledText]}>
-                                        {showPassword ? 'Hide' : 'Show'}
-                                    </Text>
-                                </Pressable>
-                            </Field>
-
-                            {serverError ? (
-                                <Text style={styles.serverError} accessibilityRole="alert">
-                                    {serverError}
-                                </Text>
-                            ) : null}
-
-                            <Pressable 
-                                style={({ pressed }) => [
-                                    styles.primaryButton, 
-                                    pressed && styles.pressed, 
-                                    isSubmitting && styles.disabledButton
-                                ]} 
-                                disabled={isSubmitting} 
-                                onPress={handleSubmit(onSubmit)} 
-                                accessibilityRole="button"
-                                accessibilityState={{ disabled: isSubmitting }}
-                            >
-                                {isSubmitting ? (
-                                    <ActivityIndicator color="#FFFFFF" size="small" />
-                                ) : (
-                                    <Text style={styles.primaryButtonText}>Sign in</Text>
-                                )}
-                            </Pressable>
                         </View>
+                        <Text style={styles.eyebrow}>GAMIFRENCH</Text>
+                        <Text style={styles.title}>Welcome back.</Text>
+                        <Text style={styles.subtitle}>A few minutes of French, every day.</Text>
+                    </View>
 
-                        <Link href="/(auth)/register" style={styles.link} disabled={isSubmitting}>
-                            Create a student account
-                        </Link>
-                    </ScrollView>
-                </TouchableWithoutFeedback>
+                    {/* Form Section */}
+                    <View style={styles.form}>
+                        <ServerWakeBanner />
+
+                        <Field 
+                            control={control} 
+                            name="email" 
+                            label="Email" 
+                            error={errors.email?.message} 
+                            autoCapitalize="none" 
+                            keyboardType="email-address"
+                            autoComplete="email"
+                            autoCorrect={false}
+                            spellCheck={false}
+                            editable={!isSubmitting}
+                            textContentType="emailAddress"
+                            returnKeyType="next"
+                        />
+                        
+                        <Field 
+                            control={control} 
+                            name="password" 
+                            label="Password" 
+                            error={errors.password?.message} 
+                            secureTextEntry={!showPassword}
+                            autoCapitalize="none"
+                            autoComplete="password"
+                            autoCorrect={false}
+                            spellCheck={false}
+                            editable={!isSubmitting}
+                            textContentType="password"
+                            returnKeyType="go"
+                            onSubmitEditing={handleSubmit(onSubmit)}
+                        >
+                            <PasswordVisibilityToggle
+                                visible={showPassword}
+                                onPress={() => setShowPassword((value) => !value)}
+                                disabled={isSubmitting}
+                            />
+                        </Field>
+
+                        {serverError ? (
+                            <Text style={styles.serverError} accessibilityRole="alert">
+                                {serverError}
+                            </Text>
+                        ) : null}
+
+                        <Pressable 
+                            style={({ pressed }) => [
+                                styles.primaryButton, 
+                                pressed && styles.pressed, 
+                                isSubmitting && styles.disabledButton
+                            ]} 
+                            disabled={isSubmitting} 
+                            onPress={handleSubmit(onSubmit)} 
+                            accessibilityRole="button"
+                            accessibilityState={{ disabled: isSubmitting }}
+                        >
+                            {isSubmitting ? (
+                                <View style={styles.buttonBusy}>
+                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                    <Text style={styles.primaryButtonText}>
+                                        {phase === 'waking' ? 'Waking server…' : 'Signing in…'}
+                                    </Text>
+                                </View>
+                            ) : (
+                                <Text style={styles.primaryButtonText}>Sign in</Text>
+                            )}
+                        </Pressable>
+                    </View>
+
+                    <Link href="/(auth)/register" style={styles.link} disabled={isSubmitting}>
+                        Create a student account
+                    </Link>
+
+                    <AdminDashboardLink disabled={isSubmitting} />
+                </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -188,12 +209,9 @@ const styles = StyleSheet.create({
     
     header: {
         alignItems: 'center',
-        marginBottom: 32,
+        marginBottom: 28,
     },
-    brandMark: { 
-        width: 250, 
-        height: 250, 
-        borderRadius: 150, 
+    brandMark: {
         backgroundColor: '#1476D4', 
         alignItems: 'center', 
         justifyContent: 'center', 
@@ -231,7 +249,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#FEF3F2',
     },
     input: { flex: 1, color: '#182133', fontSize: 16, minHeight: 56 },
-    showPassword: { color: '#1476D4', fontWeight: '700', paddingVertical: 12, paddingLeft: 12 },
     
     error: { color: '#B42318', fontSize: 13, fontWeight: '500', marginTop: 2 },
     serverError: { 
@@ -259,12 +276,12 @@ const styles = StyleSheet.create({
     primaryButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
     pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
     disabledButton: { backgroundColor: '#A0C4E8', elevation: 0, shadowOpacity: 0 },
-    disabledText: { opacity: 0.5 },
+    buttonBusy: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     link: { 
         color: '#1476D4', 
         textAlign: 'center', 
         fontWeight: '700', 
-        marginTop: 32, 
+        marginTop: 24,
         padding: 12,
         fontSize: 15
     },

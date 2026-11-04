@@ -1,4 +1,5 @@
-import { ApiError, apiRequest } from '@/services/apiClient';
+import { ApiError, apiRequest, isColdStartError } from '@/services/apiClient';
+import { isDeviceOffline, wakeServer } from '@/services/serverWarmup';
 import type { AuthCredentials, AuthSession, RegistrationInput } from '@/types/auth';
 
 export class AuthServiceError extends Error {
@@ -11,11 +12,31 @@ export class AuthServiceError extends Error {
   }
 }
 
+export const SERVER_ASLEEP_MESSAGE =
+  'The server is still waking up. Please wait a moment and try again.';
+export const OFFLINE_SIGN_IN_MESSAGE =
+  "You're offline. Connect to the internet to sign in — once signed in, lessons keep working offline.";
+
+const wakeFailureMessage = () => (isDeviceOffline() ? OFFLINE_SIGN_IN_MESSAGE : SERVER_ASLEEP_MESSAGE);
+
+/*
+ * Sign-in, sign-up and refresh wait for the server to be awake first (see
+ * serverWarmup), so a sleeping Render instance means a longer spinner instead
+ * of a failed login. If the post still hits a cold server, it is retried once
+ * after another wake-up: none of these calls changes anything on a failure.
+ */
 async function authRequest<T>(path: string, options: RequestInit) {
   try {
-    return await apiRequest<T>(path, options);
+    if (!(await wakeServer())) throw new AuthServiceError(wakeFailureMessage());
+    try {
+      return await apiRequest<T>(path, options);
+    } catch (error) {
+      if (!isColdStartError(error)) throw error;
+      if (!(await wakeServer({ force: true }))) throw new AuthServiceError(wakeFailureMessage());
+      return await apiRequest<T>(path, options);
+    }
   } catch (error) {
-    console.error('[AuthService] request failed', {
+    console.log('[AuthService] request failed', {
       path,
       status: error instanceof ApiError ? error.status : undefined,
       error,

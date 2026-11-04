@@ -1,9 +1,14 @@
-import { useAuth } from '@/store/auth-context';
 import { Slot, router } from 'expo-router';
 import { useEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { SyncBadge } from '@/components/sync-badge';
+import { useAuth } from '@/store/auth-context';
 
 export default function GameLayout() {
   const { session, isLoading } = useAuth();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     console.log('[GameLayout] auth state', {
@@ -26,5 +31,28 @@ export default function GameLayout() {
   }, [session, isLoading]);
 
   console.log('[GameLayout] rendering Slot', { isLoading, hasSession: Boolean(session) });
-  return <Slot />;
+
+  return (
+    <View style={styles.container}>
+      <Slot />
+
+      {/*
+       * Floating offline / sync indicator. `pointerEvents="none"` keeps it from
+       * stealing taps from the screen underneath.
+       */}
+      {session ? (
+        <View
+          pointerEvents="none"
+          style={[styles.badge, { top: insets.top + 6 }]}
+        >
+          <SyncBadge />
+        </View>
+      ) : null}
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  badge: { position: 'absolute', right: 12, zIndex: 20 },
+});
