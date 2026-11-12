@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import { storageGet, storageSet } from '@/store/storage';
 
 import {
   CHALLENGE_TIERS,
@@ -25,7 +25,7 @@ import { enqueueChallengeClaim } from '@/store/pending-sync';
 |   - recordMissionClaim()        -> called by the mission screen when the
 |     mission rewards are collected.
 |
-| Everything is persisted in SecureStore (same pattern as the lesson
+| Everything is persisted on-device (same pattern as the lesson
 | progress store) so challenges survive offline launches and app restarts.
 |
 | Rewards are paid by the server (POST /challenges/claim) into the learner's
@@ -69,8 +69,6 @@ export function setChallengeScope(userId) {
  */
 const MAX_TRACKED_DAYS = 21;
 const MAX_TRACKED_WEEKS = 8;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 let cachedState = null;
 
 function createEmptyState() {
@@ -146,7 +144,7 @@ export async function loadChallengeState() {
   if (cachedState) return cachedState;
 
   try {
-    const stored = await SecureStore.getItemAsync(challengesKey());
+    const stored = await storageGet(challengesKey());
     cachedState = normalizeState(stored ? JSON.parse(stored) : null);
   } catch (error) {
     console.log('[Challenges] Failed to read stored challenges, starting fresh.', error);
@@ -160,7 +158,7 @@ export async function saveChallengeState(nextState) {
   cachedState = pruneState(normalizeState(nextState));
 
   try {
-    await SecureStore.setItemAsync(challengesKey(), JSON.stringify(cachedState));
+    await storageSet(challengesKey(), JSON.stringify(cachedState));
   } catch (error) {
     console.log('[Challenges] Failed to persist challenges.', error);
   }
@@ -613,8 +611,11 @@ export async function syncDailyCompletion({ dateKey, allCleared } = {}) {
 
   const state = await loadChallengeState();
   const history = { ...state.history };
+  // Calendar arithmetic, not "minus 24h": on the day after a daylight-saving
+  // change, local midnight minus 24h lands two calendar days back.
+  const today = getDateFromKey(dateKey);
   const yesterdayKey = toDateKey(
-    new Date(getDateFromKey(dateKey).getTime() - DAY_MS)
+    new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)
   );
 
   /* Day cleared for the first time: extend (or start) the streak. */

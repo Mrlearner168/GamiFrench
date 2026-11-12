@@ -36,7 +36,10 @@ export type TranscriptionResult = {
 
 export type TranscribeOptions = {
   audioUri: string;
-  /** The target phrase, sent to Whisper as a spelling hint. */
+  /**
+   * The target phrase. Accepted for callers but deliberately NOT sent to any
+   * engine: hinting the expected answer biases the transcript toward it.
+   */
   targetPhrase?: string;
   /** Force a specific tier order (used by the deferred upgrade, which is online). */
   preferOnline?: boolean;
@@ -52,7 +55,7 @@ function groqApiKey(): string | undefined {
  * Transcribe one clip with Groq's Whisper endpoint. Throws when the request
  * fails so the ladder can move on to an offline tier.
  */
-async function groqTranscribe(audioUri: string, targetPhrase: string): Promise<string | null> {
+async function groqTranscribe(audioUri: string): Promise<string | null> {
   const apiKey = groqApiKey();
   if (!apiKey) throw new Error('Groq API key is missing.');
 
@@ -64,8 +67,10 @@ async function groqTranscribe(audioUri: string, targetPhrase: string): Promise<s
     parameters: {
       model: 'whisper-large-v3-turbo',
       language: 'fr',
-      // Forces Whisper to spell out numbers that appear in the target phrase.
-      prompt: targetPhrase,
+      // No `prompt`: passing the target sentence biased Whisper toward
+      // returning it (on mumbled or near-silent clips it often echoed the
+      // prompt back), which inflated pronunciation scores. Digits vs number
+      // words are handled by the scorer (services/pronunciation.js).
     },
   });
 
@@ -84,7 +89,6 @@ async function groqTranscribe(audioUri: string, targetPhrase: string): Promise<s
  */
 export async function transcribeClip({
   audioUri,
-  targetPhrase = '',
   preferOnline = true,
 }: TranscribeOptions): Promise<TranscriptionResult> {
   const online = isOnlineSync();
@@ -92,7 +96,7 @@ export async function transcribeClip({
   // 1. Online - Groq Whisper (best quality).
   if (preferOnline && online) {
     try {
-      const text = await groqTranscribe(audioUri, targetPhrase);
+      const text = await groqTranscribe(audioUri);
       if (text) return { text, engine: 'groq', offline: false };
     } catch (error) {
       console.log('[Transcription] Groq tier failed; falling back offline.', error);

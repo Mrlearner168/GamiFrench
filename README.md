@@ -41,6 +41,70 @@ This command will move the starter code to the **app-example** directory and cre
 - If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
 - Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
 
+## Play Store release (Android App Bundle via EAS)
+
+The `android/` folder is generated (Continuous Native Generation) and gitignored.
+**Build the Play Store `.aab` with EAS Build — never upload a locally built
+artifact**: a local `gradlew bundleRelease` is signed with the debug keystore
+(the template's release build type falls back to `signingConfigs.debug`), which
+Google Play must never see. EAS injects the managed upload keystore instead.
+
+### One-time setup
+
+1. Log in to EAS:
+
+   ```bash
+   npx eas login
+   ```
+
+2. Create the Android upload keystore and **back it up** (losing it can lock
+   you out of Play updates; also enroll in Play App Signing):
+
+   ```bash
+   npx eas credentials
+   # → Android → Set up new keystore → save the downloaded credentials
+   ```
+
+3. Configure environment variables on EAS. The local `.env` file is gitignored
+   and **is not uploaded to cloud builds**, so values must exist as EAS
+   environment variables in the `production` environment:
+
+   ```bash
+   # Required: online transcription key (falls back to offline ASR when absent)
+   npx eas env:set production --name EXPO_PUBLIC_GROQ_API_KEY --value <your-groq-key> --visibility sensitive
+
+   # Optional: explicit API base URL (already set in eas.json and hardcoded
+   # as a fallback in src/services/apiClient.ts)
+   npx eas env:set production --name EXPO_PUBLIC_API_URL --value https://gami-backend-6pc9.onrender.com/api/v1 --visibility plaintext
+   ```
+
+   > ⚠️ Any `EXPO_PUBLIC_*` value is compiled into the JS bundle and is
+   > extractable from the `.aab`. The Groq key is visible to anyone who
+   > downloads the app — long-term, proxy transcription through the
+   > GamiFrench backend instead of shipping the key client-side.
+
+4. For `eas submit`, create a Google Play Console service account with API
+   access and download its JSON key (you will be prompted for the path on
+   first submit, or set `submit.production.android.serviceAccountKeyPath`
+   in `eas.json`).
+
+### Each release
+
+1. Bump `version` in `app.config.js` (becomes `versionName`; `versionCode`
+   auto-increments because `eas.json` uses `appVersionSource: "remote"`).
+2. Build the App Bundle:
+
+   ```bash
+   npx eas build -p android --profile production
+   ```
+
+3. Submit it (or upload the downloaded `.aab` manually under
+   Play Console → Testing → Production):
+
+   ```bash
+   npx eas submit -p android --profile production
+   ```
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:

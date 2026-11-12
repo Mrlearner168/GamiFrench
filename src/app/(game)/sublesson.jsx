@@ -6,6 +6,7 @@ import {
 } from 'expo-audio';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -51,10 +52,10 @@ import {
   warmUpVoice,
 } from '@/services/voice';
 
-import { useNetworkStatus } from '@/services/connectivity';
 import { sounds } from '@/services/sound';
 import { useAuth } from '@/store/auth-context';
 import { useLessonProgress } from '@/hooks/use-lesson-progress';
+import { useStableCallback } from '@/hooks/use-stable-callback';
 import { recordSubLessonCompletion } from '@/store/challenge-progress';
 import {
   completeSubLesson,
@@ -81,6 +82,8 @@ const QUIZ_TYPES = {
   MULTIPLE_CHOICE: 'multiple-choice',
   TRUE_FALSE: 'true-false',
   SENTENCE_BUILDER: 'sentence-builder',
+  // A multiple choice question whose prompt is French audio.
+  LISTENING: 'listening',
 };
 
 /*
@@ -92,6 +95,7 @@ const QUIZ_POINTS = {
   'multiple-choice': 10,
   'true-false': 10,
   'sentence-builder': 20,
+  listening: 10,
 };
 
 /*
@@ -140,7 +144,9 @@ const learnTryTargetForItem = (item) => {
   const french = String(item?.french ?? '').trim();
   const example = String(item?.example ?? '').trim();
 
-  if (french.length < 2 && example) {
+  // No real word on the card (a letter, or symbols such as "è / ê").
+  const hasWord = /[a-zà-ÿœæ]{2,}/i.test(french);
+  if (!hasWord && example) {
     return { target: example, isFallback: true };
   }
 
@@ -189,6 +195,18 @@ const normalizeQuizAnswer = (value) => {
  * score), so the speaking check works with no network as well as online.
  */
 
+/*
+ * Stages only re-render when their own props change. Together with the stable
+ * handlers built in SubLessonScreen, a state change elsewhere on the screen
+ * (voice phase, recording status, analysis step...) no longer redraws the
+ * stage on display.
+ */
+const MemoLearnStage = memo(LearnStage);
+const MemoSpeakingStage = memo(SpeakingStage);
+const MemoQuizStage = memo(QuizStage);
+const MemoResultStage = memo(ResultStage);
+const MemoGrammarPanel = memo(GrammarPanel);
+
 export default function SubLessonScreen() {
   const { authenticatedRequest } = useAuth();
   const {
@@ -205,7 +223,6 @@ export default function SubLessonScreen() {
   const moduleId = Array.isArray(moduleParam)
     ? moduleParam[0]
     : moduleParam;
-  console.log("Module ID being used as a quiz" , moduleId);
 
   const topicKey = Array.isArray(topicId)
     ? topicId[0]
@@ -325,8 +342,8 @@ export default function SubLessonScreen() {
       : [];
 
   /*
-   * The quiz only uses multiple choice, true/false and sentence builder
-   * questions; any other question type is filtered out.
+   * The quiz uses multiple choice, true/false, sentence builder and listening
+   * questions; any other question type (fill-blank) is filtered out.
    * The memo keeps the item and question objects stable so the automatic
    * timers are never restarted by a re-render.
    */
@@ -335,6 +352,7 @@ export default function SubLessonScreen() {
       QUIZ_TYPES.MULTIPLE_CHOICE,
       QUIZ_TYPES.TRUE_FALSE,
       QUIZ_TYPES.SENTENCE_BUILDER,
+      QUIZ_TYPES.LISTENING,
     ];
 
     return Array.isArray(quizContent)
@@ -358,18 +376,6 @@ export default function SubLessonScreen() {
   const [practiceIndex, setPracticeIndex] =
     useState(0);
   const [quizIndex, setQuizIndex] = useState(0);
-
-  /*
-   * Seconds left before the next quiz question opens automatically.
-   * It stays null while no answer is being shown.
-   */
-  const [quizAdvanceSeconds, setQuizAdvanceSeconds] = useState(null);
-
-  /*
-   * Seconds left before the picked answer is checked automatically.
-   * It stays null while no answer is waiting to be checked.
-   */
-  const [quizCheckSeconds, setQuizCheckSeconds] = useState(null);
 
   const { progress, ready: progressReady } = useLessonProgress(authenticatedRequest);
 
@@ -521,25 +527,11 @@ export default function SubLessonScreen() {
    */
   const [learnVoicePhase, setLearnVoicePhase] = useState('loading');
 
-  /*
-   * Index of the word the model voice is currently reading, or null when the
-   * engine is not reporting word boundaries. Drives the follow-along highlight
-   * so the learner can see each word light up as it is spoken.
-   */
-  const [, setSpokenWordIndex] = useState(null);
-
   /**
    * Read-aloud speed for the Listen buttons. A beginner can slow the model
    * voice down instead of struggling to catch normal pace.
    */
   const [speechRateKey] = useState('normal');
-
-  /*
-   * Subscribe to connectivity changes so the screen re-renders when the
-   * connection drops or returns (the value itself is read via
-   * `useNetworkStatus()` in the sync layer; nothing here consumes it).
-   */
-  useNetworkStatus();
 
   const audioRecorder = useAudioRecorder(
     RecordingPresets.HIGH_QUALITY
@@ -695,13 +687,11 @@ export default function SubLessonScreen() {
         language: FRENCH_LOCALE,
         rate: SPEECH_RATES.normal,
 
-        // Reveal the sentence as the voice reaches it and light up each word
-        // as it is read, so the learner can follow along.
+        // Reveal the sentence as the voice reaches it. No per-word callback:
+        // nothing on screen highlights words, and updating state for every
+        // spoken word re-rendered the whole screen while the voice talked.
         onStart: () => {
           if (active) setLearnVoicePhase('speaking');
-        },
-        onWord: (index) => {
-          if (active) setSpokenWordIndex(index);
         },
         // A new card starts its sentence at once, never behind the last one.
         cutIn: true,
@@ -709,7 +699,6 @@ export default function SubLessonScreen() {
 
       if (!active) return;
 
-      setSpokenWordIndex(null);
       setLearnVoicePhase('idle');
     };
 
@@ -799,11 +788,6 @@ export default function SubLessonScreen() {
     if (correct) sounds.correct();
     else sounds.wrong();
 
-    setQuizCheckSeconds(null);
-
-    // Starts the countdown that is shown next to the button.
-    setQuizAdvanceSeconds(QUIZ_AUTO_ADVANCE_SECONDS);
-
     // Appended with an updater so a repeated trigger can never drop an answer.
     setQuizAnswers((current) => [
       ...current,
@@ -842,19 +826,13 @@ export default function SubLessonScreen() {
       return undefined;
     }
 
-    // Only ticks the countdown shown on the button.
-    const countdownTimer = setInterval(() => {
-      setQuizCheckSeconds((value) =>
-        value === null ? null : Math.max(value - 1, 0)
-      );
-    }, 1000);
-
+    // The seconds shown on the button tick inside QuizCountdown, so this
+    // screen does not re-render every second.
     const checkTimer = setTimeout(() => {
       checkQuizAnswer();
     }, QUIZ_AUTO_CHECK_MS);
 
     return () => {
-      clearInterval(countdownTimer);
       clearTimeout(checkTimer);
     };
   }, [
@@ -876,7 +854,6 @@ export default function SubLessonScreen() {
     setQuizInput('');
     setSentenceWords([]);
     setIsQuizCorrect(false);
-    setQuizCheckSeconds(null);
     setQuizIndex((value) => value + 1);
   }, []);
 
@@ -899,19 +876,12 @@ export default function SubLessonScreen() {
       return undefined;
     }
 
-    // Only ticks the countdown shown next to the button.
-    const countdownTimer = setInterval(() => {
-      setQuizAdvanceSeconds((value) =>
-        value === null ? null : Math.max(value - 1, 0)
-      );
-    }, 1000);
-
+    // The visible seconds tick inside QuizCountdown (see above).
     const advanceTimer = setTimeout(() => {
       goToNextQuizQuestion();
     }, QUIZ_AUTO_ADVANCE_MS);
 
     return () => {
-      clearInterval(countdownTimer);
       clearTimeout(advanceTimer);
     };
   }, [
@@ -923,72 +893,14 @@ export default function SubLessonScreen() {
   ]);
 
   /*
-   * SAFETY
-   */
-
-  if (!topic || !subLesson) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.error}>
-            Lesson data not found.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() =>
-              router.replace('/home')
-            }
-          >
-            <Text
-              style={styles.primaryButtonText}
-            >
-              Go Back
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (isLocked) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.error}>
-            Complete the previous lesson to unlock
-            this one.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() =>
-              router.replace({
-                pathname: '/lesson',
-                params: {
-                  country: countryName,
-                  module: moduleId,
-                },
-              })
-            }
-          >
-            <Text
-              style={styles.primaryButtonText}
-            >
-              Go Back
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  /*
    * CURRENT ITEMS
    */
 
   const currentLearnItem =
     learningItems[learnIndex];
+
+  // Only its primitive fields are passed down, so a fresh object is harmless.
+  const learnTryTarget = learnTryTargetForItem(currentLearnItem);
 
   const currentPracticeItem =
     practiceItems[practiceIndex];
@@ -1209,8 +1121,6 @@ export default function SubLessonScreen() {
     setQuizInput('');
     setSentenceWords([]);
     setShowQuizFeedback(false);
-    setQuizAdvanceSeconds(null);
-    setQuizCheckSeconds(null);
     setQuizAnswers([]);
     setIsQuizCorrect(false);
 
@@ -1664,9 +1574,6 @@ export default function SubLessonScreen() {
 
     setSelectedAnswer(answer);
     sounds.tap();
-
-    // Changing the answer restarts the automatic check countdown.
-    setQuizCheckSeconds(QUIZ_AUTO_CHECK_SECONDS);
   };
 
   const addSentenceWord = (word) => {
@@ -1674,8 +1581,6 @@ export default function SubLessonScreen() {
 
     setSentenceWords((current) => [...current, word]);
     sounds.pop();
-
-    setQuizCheckSeconds(QUIZ_AUTO_CHECK_SECONDS);
   };
 
   const removeSentenceWord = (index) => {
@@ -1685,8 +1590,6 @@ export default function SubLessonScreen() {
       current.filter((_, i) => i !== index)
     );
     sounds.tap();
-
-    setQuizCheckSeconds(QUIZ_AUTO_CHECK_SECONDS);
   };
 
   const handleQuizAction = async () => {
@@ -1767,20 +1670,15 @@ export default function SubLessonScreen() {
     const speakingScoreForSync =
       speakingContent && typeof practiceScore === 'number' ? practiceScore : undefined;
 
-    const scoresToAverage = [quizPercentage];
-
-    // Practice is the speaking exercise, so its score is already included
-    // via practiceScore (do not add speakingAccuracy twice).
-    if (speakingContent) {
-      scoresToAverage.push(practiceScore);
-    }
-
-    const overallScore = scoresToAverage.length
-      ? Math.round(
-          scoresToAverage.reduce((total, value) => total + value, 0) /
-            scoresToAverage.length
-        )
-      : 0;
+    /*
+     * The graded score is the quiz alone — the same rule the server applies
+     * (Backend/services/sublesson_grading.py). Blending in the on-device
+     * pronunciation score made the device mark sub-lessons complete (or ready
+     * for a mission) that the server then refused, and skip syncing passes
+     * the server would have accepted. Speaking is still shown and stored on
+     * its own, it just never decides completion.
+     */
+    const overallScore = quizPercentage;
 
     /*
      * Persist the quiz / speaking split for the end-of-topic result screen.
@@ -1936,8 +1834,6 @@ export default function SubLessonScreen() {
     // A fresh run starts on a card whose text waits for the voice again.
     setLearnVoicePhase('loading');
     setQuizIndex(0);
-    setQuizAdvanceSeconds(null);
-    setQuizCheckSeconds(null);
 
     setPracticeItemScores([]);
     setPracticeScore(0);
@@ -2058,6 +1954,92 @@ export default function SubLessonScreen() {
    * sentence then plays immediately. The warm up effect guarantees the flag
    * flips within VOICE_READY_TIMEOUT_MS even if the engine is missing.
    */
+  /*
+   * STABLE HANDLERS
+   *
+   * Same identity on every render, always running the latest handler, so the
+   * memoised stages below are not redrawn just because a handler was
+   * re-created. Declared before every early return (hooks must run on every
+   * render); the handlers themselves are only called from taps and timers.
+   */
+  const onSpeak = useStableCallback(speak);
+  const onNextLearn = useStableCallback(nextLearn);
+  const onOpenGrammar = useStableCallback(() => setShowGrammar(true));
+  const onCloseGrammar = useStableCallback(() => setShowGrammar(false));
+  const onTryStart = useStableCallback(startLearnTry);
+  const onTryStop = useStableCallback(stopLearnTryAndScore);
+  const onTryReset = useStableCallback(resetLearnTry);
+  const onStartRecording = useStableCallback(startRecording);
+  const onStopRecording = useStableCallback(stopRecordingAndRate);
+  const onContinueSpeaking = useStableCallback(continueFromSpeaking);
+  const onSelectAnswer = useStableCallback(selectAnswer);
+  const onAddWord = useStableCallback(addSentenceWord);
+  const onRemoveWord = useStableCallback(removeSentenceWord);
+  const onQuizAction = useStableCallback(handleQuizAction);
+  const onRestartLesson = useStableCallback(restartLesson);
+  const onContinueSubLesson = useStableCallback(handleContinueSubLesson);
+
+  /*
+   * SAFETY
+   */
+
+  if (!topic || !subLesson) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.error}>
+            Lesson data not found.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() =>
+              router.replace('/home')
+            }
+          >
+            <Text
+              style={styles.primaryButtonText}
+            >
+              Go Back
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isLocked) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.error}>
+            Complete the previous lesson to unlock
+            this one.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() =>
+              router.replace({
+                pathname: '/lesson',
+                params: {
+                  country: countryName,
+                  module: moduleId,
+                },
+              })
+            }
+          >
+            <Text
+              style={styles.primaryButtonText}
+            >
+              Go Back
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!isVoiceReady || !progressReady) {
     return (
       <SafeAreaView style={styles.voiceLoadingContainer}>
@@ -2165,31 +2147,31 @@ export default function SubLessonScreen() {
         </View>
 
         {stage === STAGES.LEARN && (
-          <LearnStage
+          <MemoLearnStage
             item={currentLearnItem}
             index={learnIndex}
             total={learningItems.length}
-            speak={speak}
+            speak={onSpeak}
             hasGrammar={!!grammar}
             voicePhase={learnVoicePhase}
-            onOpenGrammar={() => setShowGrammar(true)}
-            onNext={nextLearn}
-            tryTarget={learnTryTargetForItem(currentLearnItem).target}
-            tryIsFallback={learnTryTargetForItem(currentLearnItem).isFallback}
+            onOpenGrammar={onOpenGrammar}
+            onNext={onNextLearn}
+            tryTarget={learnTryTarget.target}
+            tryIsFallback={learnTryTarget.isFallback}
             tryRecording={learnTryRecording}
             tryAnalyzing={learnTryAnalyzing}
             tryTranscript={learnTryTranscript}
             tryScore={learnTryScore}
             tryWords={learnTryWords}
             tryError={learnTryError}
-            onTryStart={startLearnTry}
-            onTryStop={stopLearnTryAndScore}
-            onTryReset={resetLearnTry}
+            onTryStart={onTryStart}
+            onTryStop={onTryStop}
+            onTryReset={onTryReset}
           />
         )}
 
         {stage === STAGES.SPEAKING && (
-          <SpeakingStage
+          <MemoSpeakingStage
             speaking={speakingContent}
             isRecording={isRecordingUI}
             isAnalyzing={isAnalyzing}
@@ -2197,15 +2179,15 @@ export default function SubLessonScreen() {
             transcript={speakingTranscript}
             accuracy={speakingAccuracy}
             deferred={speakingDeferred}
-            speak={speak}
-            onStart={startRecording}
-            onStop={stopRecordingAndRate}
-            onContinue={continueFromSpeaking}
+            speak={onSpeak}
+            onStart={onStartRecording}
+            onStop={onStopRecording}
+            onContinue={onContinueSpeaking}
           />
         )}
 
         {stage === STAGES.QUIZ && (
-          <QuizStage
+          <MemoQuizStage
             quiz={currentQuiz}
             index={quizIndex}
             total={quizItems.length}
@@ -2214,27 +2196,23 @@ export default function SubLessonScreen() {
             sentenceWords={sentenceWords}
             showFeedback={showQuizFeedback}
             isCorrect={isQuizCorrect}
-            onSelect={selectAnswer}
+            onSelect={onSelectAnswer}
             onInput={setQuizInput}
-            onAddWord={addSentenceWord}
-            onRemoveWord={removeSentenceWord}
-            onSubmit={handleQuizAction}
+            onAddWord={onAddWord}
+            onRemoveWord={onRemoveWord}
+            onSubmit={onQuizAction}
             earnedPoints={
               showQuizFeedback
                 ? quizAnswers[quizIndex]?.points ?? 0
                 : 0
             }
             maxPoints={pointsForQuizType(quizTypeOf(currentQuiz))}
-            autoAdvanceSeconds={quizAdvanceSeconds}
-            autoCheckSeconds={
-              quizCheckSeconds ?? QUIZ_AUTO_CHECK_SECONDS
-            }
-            speak={speak}
+            speak={onSpeak}
           />
         )}
 
         {stage === STAGES.RESULT && (
-          <ResultStage
+          <MemoResultStage
             quizScore={resultQuizScore}
             quizTotal={quizItems.length}
             quizPoints={resultQuizPoints}
@@ -2248,17 +2226,17 @@ export default function SubLessonScreen() {
             stars={serverStars}
             xpAwarded={serverXpAwarded}
             xpTotal={serverXpTotal}
-            onRestart={restartLesson}
-            onContinue={handleContinueSubLesson}
+            onRestart={onRestartLesson}
+            onContinue={onContinueSubLesson}
           />
         )}
       </ScrollView>
 
       {showGrammar && grammar && (
-        <GrammarPanel
+        <MemoGrammarPanel
           grammar={grammar}
-          speak={speak}
-          onClose={() => setShowGrammar(false)}
+          speak={onSpeak}
+          onClose={onCloseGrammar}
         />
       )}
     </SafeAreaView>
@@ -2867,6 +2845,25 @@ function SpeakingStage({
 }
 
 /*
+ * Counts whole seconds down from `total` and renders `children(secondsLeft)`.
+ * The tick lives here so it re-renders only the quiz button, not the whole
+ * screen. It is display only: SubLessonScreen's timers do the real check /
+ * advance. Remount it with a new `key` to restart the count.
+ */
+function QuizCountdown({ total, children }) {
+  const [secondsLeft, setSecondsLeft] = useState(total);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSecondsLeft((value) => Math.max(value - 1, 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return children(secondsLeft);
+}
+
+/*
  * QUIZ
  */
 function QuizStage({
@@ -2885,8 +2882,6 @@ function QuizStage({
   onSubmit,
   earnedPoints = 0,
   maxPoints = 0,
-  autoAdvanceSeconds = null,
-  autoCheckSeconds = null,
   speak,
 }) {
   if (!quiz) {
@@ -2913,19 +2908,58 @@ function QuizStage({
   // The answer was revealed and the next question is counting down.
   const isWaitingForNextQuestion = showFeedback && !isLastQuestion;
 
-  const autoCheckCountdown =
-    autoCheckSeconds ?? QUIZ_AUTO_CHECK_SECONDS;
-  const autoAdvanceCountdown =
-    autoAdvanceSeconds ?? QUIZ_AUTO_ADVANCE_SECONDS;
-
   const isCountingDown =
     isWaitingToCheck || isWaitingForNextQuestion;
-  const countdownSeconds = isWaitingToCheck
-    ? autoCheckCountdown
-    : autoAdvanceCountdown;
   const countdownTotal = isWaitingToCheck
     ? QUIZ_AUTO_CHECK_SECONDS
     : QUIZ_AUTO_ADVANCE_SECONDS;
+
+  /*
+   * A new key restarts the visible count: a changed answer restarts the check
+   * countdown, a new question restarts the advance one - the same moments the
+   * screen's own timers restart.
+   */
+  const countdownKey = isWaitingToCheck
+    ? `check-${index}-${JSON.stringify(selectedAnswer)}-${sentenceWords.join('|')}`
+    : `advance-${index}`;
+
+  const renderActionButton = (secondsLeft) => (
+    <>
+      <TouchableOpacity
+        style={[
+          styles.primaryButton,
+          !canSubmitAnswer && styles.disabledButton,
+        ]}
+        disabled={!canSubmitAnswer}
+        onPress={onSubmit}
+      >
+        <Text style={styles.primaryButtonText}>
+          {showFeedback
+            ? isLastQuestion
+              ? 'See Results'
+              : `Next Question (${secondsLeft}s)`
+            : isWaitingToCheck
+              ? `Checking in ${secondsLeft}s`
+              : 'Check Answer'}
+        </Text>
+      </TouchableOpacity>
+
+      {isCountingDown && (
+        <View style={styles.quizAutoAdvanceTrack}>
+          <View
+            style={[
+              styles.quizAutoAdvanceFill,
+              {
+                width: `${Math.round(
+                  (secondsLeft / countdownTotal) * 100
+                )}%`,
+              },
+            ]}
+          />
+        </View>
+      )}
+    </>
+  );
 
   const getTypeLabel = () => {
     switch (quizType) {
@@ -2937,6 +2971,9 @@ function QuizStage({
 
       case QUIZ_TYPES.SENTENCE_BUILDER:
         return 'Sentence Builder';
+
+      case QUIZ_TYPES.LISTENING:
+        return 'Listening';
 
       default:
         return 'Quiz';
@@ -3171,6 +3208,8 @@ function QuizStage({
 
         {quizType === QUIZ_TYPES.TRUE_FALSE && renderTrueFalse()}
 
+        {quizType === QUIZ_TYPES.LISTENING && renderListening()}
+
         {quizType === QUIZ_TYPES.SENTENCE_BUILDER &&
           renderSentenceBuilder()}
 
@@ -3219,38 +3258,12 @@ function QuizStage({
         )}
       </View>
 
-      <TouchableOpacity
-        style={[
-          styles.primaryButton,
-          !canSubmitAnswer && styles.disabledButton,
-        ]}
-        disabled={!canSubmitAnswer}
-        onPress={onSubmit}
-      >
-        <Text style={styles.primaryButtonText}>
-          {showFeedback
-            ? isLastQuestion
-              ? 'See Results'
-              : `Next Question (${autoAdvanceCountdown}s)`
-            : isWaitingToCheck
-              ? `Checking in ${autoCheckCountdown}s`
-              : 'Check Answer'}
-        </Text>
-      </TouchableOpacity>
-
-      {isCountingDown && (
-        <View style={styles.quizAutoAdvanceTrack}>
-          <View
-            style={[
-              styles.quizAutoAdvanceFill,
-              {
-                width: `${Math.round(
-                  (countdownSeconds / countdownTotal) * 100
-                )}%`,
-              },
-            ]}
-          />
-        </View>
+      {isCountingDown ? (
+        <QuizCountdown key={countdownKey} total={countdownTotal}>
+          {renderActionButton}
+        </QuizCountdown>
+      ) : (
+        renderActionButton(countdownTotal)
       )}
 
       {isWaitingToCheck && (
@@ -3304,6 +3317,8 @@ function ResultStage({
         return 'True / False';
       case QUIZ_TYPES.SENTENCE_BUILDER:
         return 'Sentence Builder';
+      case QUIZ_TYPES.LISTENING:
+        return 'Listening';
       default:
         return 'Quiz';
     }
@@ -3315,6 +3330,8 @@ function ResultStage({
         return '🧩';
       case QUIZ_TYPES.TRUE_FALSE:
         return '⚖️';
+      case QUIZ_TYPES.LISTENING:
+        return '🎧';
       default:
         return '🔵';
     }

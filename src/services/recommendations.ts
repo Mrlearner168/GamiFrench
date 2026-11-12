@@ -4,7 +4,8 @@ import { getTopicProgress } from '@/store/lesson-progress';
 
 export type StartupAssessment = {
   moduleKey: string;
-  takenAt: string;
+  /** Missing on an incomplete/partially written assessment; callers check it. */
+  takenAt?: string;
   percentage: number;
   topicMastery: Record<string, { score: number; weakness: boolean; stars: number }>;
   /** Taken offline and not graded yet (replaced when the answers sync). */

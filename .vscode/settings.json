@@ -3,5 +3,16 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+
+  // Stop VS Code's Java extensions from importing android/ as a Gradle
+  // project. Their background Gradle daemon syncs the project while
+  // `gradlew assembleDebug` runs and deletes the native `.cxx` build folders
+  // mid-build ("clang++: no such file or directory: ...cpp.o").
+  "java.import.gradle.enabled": false,
+  "java.import.maven.enabled": false,
+  "java.autobuild.enabled": false,
+  "java.configuration.updateBuildConfiguration": "disabled",
+  "gradle.autoDetect": "off",
+  "java.import.exclusions": ["**/node_modules/**", "**/android/**"]
 }

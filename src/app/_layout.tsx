@@ -2,8 +2,10 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { AppState, useColorScheme } from 'react-native';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { useReminderTaps } from '@/hooks/use-daily-reminders';
 import { AuthProvider } from '@/store/auth-context';
 import { SyncProvider } from '@/store/sync-context';
 import { subscribeToReconnect } from '@/services/connectivity';
@@ -15,6 +17,9 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   console.log('[RootLayout] render', { colorScheme });
+
+  // Tapping a daily reminder opens the map.
+  useReminderTaps();
 
   // Pre-create audio players only — no sound plays here. The audio gate
   // opens in AuthProvider after a successful login / restored session
@@ -45,6 +50,8 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        {/* Needed by KeyboardAwareScrollView on the sign-in screens. */}
+        <KeyboardProvider>
         <AuthProvider>
           <SyncProvider>
             <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -58,6 +65,7 @@ export default function RootLayout() {
             </ThemeProvider>
           </SyncProvider>
         </AuthProvider>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

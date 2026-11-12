@@ -1,49 +1,49 @@
 /*
- * MODULE 6 — Speaking content (A2 education, work & technology)
+ * MODULE 6 — Speaking content (A1+ education, work & technology)
  */
 export const speakingContent = {
   'm6-l1-workplace': {
-    target: 'Je travaille dans un bureau, mes horaires sont de neuf à cinq.',
-    translation: 'I work in an office, my hours are from nine to five.',
-    pronunciation: 'zhuh tra-vahy dahn-zun bew-roh, may oh-rehr sohn duh nuhv ah sank',
-    tips: 'Keep “mes horaires” smooth, then give the two hours clearly.',
-    phoneticIPA: '/ʒə tʁavaj dɑ̃z‿œ̃ byʁo me zɔʁɛʁ sɔ̃ də nœ̃ a sɛ̃k/',
-    context: 'A natural answer when meeting new colleagues.',
+    target: 'Je travaille dans un bureau de neuf heures à cinq heures.',
+    translation: 'I work in an office from nine to five.',
+    pronunciation: 'zhuh tra-vye dahn-zuhn bew-roh duh nuh-vur ah san-kur',
+    tips: 'Link “dans un” as “dahn-zuhn”; in “neuf heures” the f sounds like a v (“nuh-vur”), and the q of “cinq” links to “heures”.',
+    phoneticIPA: '/ʒə tʁavaj dɑ̃z‿œ̃ byʁo də nœv‿œʁ a sɛ̃k‿œʁ/',
+    context: 'A natural answer when new colleagues ask about your job.',
   },
 
   'm6-l2-school': {
-    target: 'J’apprends le français et mon examen est la semaine prochaine.',
-    translation: 'I am learning French and my exam is next week.',
-    pronunciation: 'zhah-prahn luh frahn-say ay mohn neg-zah-man ay la suh-men pro-shen',
-    tips: 'Link “j’apprends le” together, then slow down for “examen”.',
-    phoneticIPA: '/ʒa.pʁɑ̃də lə fʁɑ̃sɛ e mɔ̃ nɛgazamɛ la səmɛn pʁɔʃɛn/',
-    context: 'Perfect for telling a teacher or friend about your studies.',
+    target: 'J’apprends le français et j’ai un examen lundi.',
+    translation: 'I am learning French and I have an exam on Monday.',
+    pronunciation: 'zha-prahn luh frahn-say ay zhay uhn-neg-za-man luhn-dee',
+    tips: 'Do not pronounce the final “ds” of “apprends” or the t of “et”; link “un examen” as “uhn-neg-za-man”.',
+    phoneticIPA: '/ʒapʁɑ̃ lə fʁɑ̃sɛ e ʒe œ̃n‿ɛɡzamɛ̃ lœ̃di/',
+    context: 'Use it to tell a teacher or a friend about your studies.',
   },
 
   'm6-l3-technology': {
-    target: 'Ma batterie est faible. Quel est le mot de passe du Wi-Fi ?',
-    translation: 'My battery is low. What is the Wi-Fi password?',
-    pronunciation: 'ma bat-ree ay fah-bluh kel ay luh moh duh pass dew wee-fee',
-    tips: 'Two short questions: state the problem, then ask politely.',
-    phoneticIPA: '/ma batʁi ɛ fɛbl kɛl ɛ lə mo də pas dy wifi/',
-    context: 'The classic café request — always appreciated.',
+    target: 'Ma batterie est faible. Vous avez un chargeur ?',
+    translation: 'My battery is low. Do you have a charger?',
+    pronunciation: 'ma ba-tree ay febl — voo-za-vay uhn shar-zhur',
+    tips: 'Link “vous avez” with a z sound, and let your voice rise at the end of the question.',
+    phoneticIPA: '/ma batʁi ɛ fɛbl vuz‿ave œ̃ ʃaʁʒœʁ/',
+    context: 'The classic café request when your phone is almost dead.',
   },
 
   'm6-l4-past-future': {
-    target: 'Hier, j’ai fini mon rapport. Demain, je vais me reposer.',
-    translation: 'Yesterday, I finished my report. Tomorrow, I am going to rest.',
-    pronunciation: 'yehr zhay fee-nee mohn ra-por duh-man zhuh vay muh ruh-po-zay',
-    tips: 'Contrast past and future clearly; pause between the two sentences.',
-    phoneticIPA: '/jɛʁ ʒe fini mɔ̃ ʁapɔʁ dəmɛ̃ ʒə vɛ mə ʁəpoze/',
-    context: 'A neat way to sum up your week in one breath.',
+    target: 'Hier, j’ai fini mes devoirs. Demain, je vais travailler.',
+    translation: 'Yesterday, I finished my homework. Tomorrow, I am going to work.',
+    pronunciation: 'yehr zhay fee-nee may duh-vwahr — duh-man zhuh vay tra-va-yay',
+    tips: '“J’ai” (zhay) marks the past and “je vais” + infinitive marks the future; pause between the two sentences.',
+    phoneticIPA: '/jɛʁ ʒe fini me dəvwaʁ dəmɛ̃ ʒə vɛ tʁavaje/',
+    context: 'A neat way to compare yesterday and tomorrow.',
   },
 
   'm6-l5-instructions': {
     target: 'D’abord, ouvrez le fichier. Ensuite, cliquez sur Envoyer.',
     translation: 'First, open the file. Then, click on Send.',
-    pronunciation: 'da-bor oo-vray luh fee-syehr ahn-sweet klee-kay soor ahn-vway-yay',
-    tips: 'Speak slowly and clearly — instructions must be easy to follow.',
-    phoneticIPA: '/da.bɔʁ uvʁe lə fiʃe ɑ̃sɥit klikе sʏʁ ɑ̃vwaje/',
+    pronunciation: 'da-bor oo-vray luh fee-shyay — ahn-sweet klee-kay sewr ahn-vwah-yay',
+    tips: 'The -ez endings sound like “ay”; keep “sur” (ew) different from “sous” (oo).',
+    phoneticIPA: '/dabɔʁ uvʁe lə fiʃje ɑ̃sɥit klike syʁ ɑ̃vwaje/',
     context: 'How you guide a colleague through a task, step by step.',
   },
 };

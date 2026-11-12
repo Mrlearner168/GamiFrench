@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import { storageGet, storageSet } from '@/store/storage';
 
 import { findSubLessonById, getCountryForModule } from '@/data/lessons/catalog';
 import {
@@ -10,7 +10,7 @@ import {
  * ---------------------------------------------------------------------------
  * DEVICE STORAGE
  *
- * Everything in this module is persisted in SecureStore, and every key is
+ * Everything in this module is persisted on-device (SecureStore on native, localStorage on web), and every key is
  * namespaced by learner: `gamifrench.<userId>.<suffix>`.
  *
  * The device is shared (a family phone, a test build, the web preview), so an
@@ -62,7 +62,7 @@ export function setLessonProgressScope(userId) {
 
 export async function loadPracticeScores() {
   if (Object.keys(cachedPracticeScores).length) return cachedPracticeScores;
-  const stored = await SecureStore.getItemAsync(scopedKey('practice-scores'));
+  const stored = await storageGet(scopedKey('practice-scores'));
   cachedPracticeScores = stored ? JSON.parse(stored) : {};
   
   console.log('[Store] Practice scores loaded:', cachedPracticeScores);
@@ -72,7 +72,7 @@ export async function loadPracticeScores() {
 export async function loadLessonProgress() {
   await loadBestScores();
   if (Object.keys(cachedProgress).length) return cachedProgress;
-  const stored = await SecureStore.getItemAsync(scopedKey('lesson-progress'));
+  const stored = await storageGet(scopedKey('lesson-progress'));
   cachedProgress = stored ? JSON.parse(stored) : {};
   
   console.log('[Store] Lesson progress loaded:', cachedProgress);
@@ -88,7 +88,7 @@ let bestScoresLoaded = false;
 async function loadBestScores() {
   if (bestScoresLoaded) return cachedBestScores;
   try {
-    const stored = await SecureStore.getItemAsync(scopedKey('sublesson-best'));
+    const stored = await storageGet(scopedKey('sublesson-best'));
     cachedBestScores = { ...(stored ? JSON.parse(stored) : {}), ...cachedBestScores };
   } catch (error) {
     console.log('[Store] Could not read best scores:', error);
@@ -98,7 +98,7 @@ async function loadBestScores() {
 }
 
 function persistBestScores() {
-  SecureStore.setItemAsync(scopedKey('sublesson-best'), JSON.stringify(cachedBestScores)).catch(
+  storageSet(scopedKey('sublesson-best'), JSON.stringify(cachedBestScores)).catch(
     (error) => console.log('[Store] Could not save best scores:', error)
   );
 }
@@ -162,9 +162,9 @@ export async function completeSubLesson(country, topicId, subLessonId, scorePerc
   }
   
   cachedProgress = { ...progress, [country]: { ...countryProgress, [topicId]: topicProgress } };
-  await SecureStore.setItemAsync(scopedKey('lesson-progress'), JSON.stringify(cachedProgress));
+  await storageSet(scopedKey('lesson-progress'), JSON.stringify(cachedProgress));
   
-  console.log('[Store] Updated Lesson Progress saved to SecureStore:', JSON.stringify(cachedProgress));
+  console.log('[Store] Updated Lesson Progress saved to device storage:', JSON.stringify(cachedProgress));
   
   return cachedProgress;
 }
@@ -208,12 +208,12 @@ export async function saveSubLessonPracticeScore(
     },
   };
 
-  await SecureStore.setItemAsync(
+  await storageSet(
     scopedKey('practice-scores'),
     JSON.stringify(cachedPracticeScores)
   );
   
-  console.log('[Store] Practice scores saved to SecureStore.');
+  console.log('[Store] Practice scores saved to device storage.');
   return cachedPracticeScores;
 }
 
@@ -259,12 +259,12 @@ export async function saveSubLessonResultStats(
     },
   };
 
-  await SecureStore.setItemAsync(
+  await storageSet(
     scopedKey('practice-scores'),
     JSON.stringify(cachedPracticeScores)
   );
 
-  console.log('[Store] Sub-lesson result statistics saved to SecureStore.');
+  console.log('[Store] Sub-lesson result statistics saved to device storage.');
   return cachedPracticeScores;
 }
 
@@ -280,7 +280,7 @@ export async function loadSpeakingScores() {
   if (cachedSpeakingScores) return cachedSpeakingScores;
 
   try {
-    const stored = await SecureStore.getItemAsync(scopedKey('speaking-scores'));
+    const stored = await storageGet(scopedKey('speaking-scores'));
     cachedSpeakingScores = stored ? JSON.parse(stored) : {};
   } catch (error) {
     console.log('[Store] Failed to read speaking scores, starting empty.', error);
@@ -325,7 +325,7 @@ export async function saveSubLessonSpeakingScore(
   };
 
   try {
-    await SecureStore.setItemAsync(
+    await storageSet(
       scopedKey('speaking-scores'),
       JSON.stringify(cachedSpeakingScores)
     );
@@ -588,7 +588,7 @@ export async function loadClaimedMissions() {
   if (cachedClaimedMissions) return cachedClaimedMissions;
 
   try {
-    const stored = await SecureStore.getItemAsync(scopedKey('claimed-missions'));
+    const stored = await storageGet(scopedKey('claimed-missions'));
     const parsed = stored ? JSON.parse(stored) : [];
     cachedClaimedMissions = Array.isArray(parsed) ? parsed : [];
   } catch (error) {
@@ -611,7 +611,7 @@ export async function saveClaimedMission(missionId) {
   cachedClaimedMissions = [...claimed, missionId];
 
   try {
-    await SecureStore.setItemAsync(
+    await storageSet(
       scopedKey('claimed-missions'),
       JSON.stringify(cachedClaimedMissions)
     );
@@ -665,7 +665,7 @@ export async function saveLastPlayedTopic(country, topicId, subLessonIndex = '0'
       subLessonIndex: String(subLessonIndex),
       timestamp: new Date().toISOString()
     });
-    await SecureStore.setItemAsync(scopedKey('last-played-topic'), data);
+    await storageSet(scopedKey('last-played-topic'), data);
     console.log(`[Store] Last played topic saved: ${country} - ${topicId} (SubLesson: ${subLessonIndex})`);
   } catch (error) {
     console.log('[Store] Failed to save last played topic.', error);
@@ -674,7 +674,7 @@ export async function saveLastPlayedTopic(country, topicId, subLessonIndex = '0'
 
 export async function loadLastPlayedTopic() {
   try {
-    const stored = await SecureStore.getItemAsync(scopedKey('last-played-topic'));
+    const stored = await storageGet(scopedKey('last-played-topic'));
     return stored ? JSON.parse(stored) : null;
   } catch (error) {
     console.log('[Store] Failed to load last played topic.', error);
@@ -697,7 +697,7 @@ export async function loadModuleQuizResults() {
   if (cachedModuleQuizResults) return cachedModuleQuizResults;
 
   try {
-    const stored = await SecureStore.getItemAsync(scopedKey(MODULE_QUIZ_SUFFIX));
+    const stored = await storageGet(scopedKey(MODULE_QUIZ_SUFFIX));
     cachedModuleQuizResults = stored ? JSON.parse(stored) : {};
   } catch (error) {
     console.log('[Store] Failed to read module quiz results, starting empty.', error);
@@ -731,7 +731,7 @@ export async function saveModuleQuizResult(moduleId, percentage = 0) {
   };
 
   try {
-    await SecureStore.setItemAsync(
+    await storageSet(
       scopedKey(MODULE_QUIZ_SUFFIX),
       JSON.stringify(cachedModuleQuizResults)
     );
@@ -790,7 +790,7 @@ export async function mergeServerContentIntoLocal(content) {
 
   if (changed) {
     cachedProgress = progress;
-    await SecureStore.setItemAsync(scopedKey('lesson-progress'), JSON.stringify(progress));
+    await storageSet(scopedKey('lesson-progress'), JSON.stringify(progress));
     console.log('[Store] Merged server completions into local progress mirror.');
   }
 
@@ -821,7 +821,7 @@ export async function mergeServerModuleQuizResults(assessments) {
   if (changed) {
     cachedModuleQuizResults = next;
     try {
-      await SecureStore.setItemAsync(scopedKey(MODULE_QUIZ_SUFFIX), JSON.stringify(next));
+      await storageSet(scopedKey(MODULE_QUIZ_SUFFIX), JSON.stringify(next));
       console.log('[Store] Merged server final-quiz results into local mirror.');
     } catch (error) {
       // Still applied in memory for this run; the next pull retries the write.
@@ -839,7 +839,7 @@ export async function mergeClaimedMissionsIntoLocal(missionIds) {
 
   if (merged.length !== claimed.length) {
     cachedClaimedMissions = merged;
-    await SecureStore.setItemAsync(scopedKey('claimed-missions'), JSON.stringify(merged));
+    await storageSet(scopedKey('claimed-missions'), JSON.stringify(merged));
     console.log('[Store] Merged server mission claims into local mirror.');
   }
 

@@ -69,10 +69,29 @@ export class ApiError extends Error {
  * Turns a backend failure into a message a learner can act on. Server-side
  * failures (5xx) never show raw server text; 4xx answers keep the backend's
  * message because those are written for the user (e.g. "Email already taken").
+ *
+ * 502/503/504 from Render while the service boots *also* keep the generic
+ * "waking up" copy — except when the backend actually answered with one of
+ * the known explicit codes, in which case we surface the backend's text
+ * verbatim. Without this carve-out, a real ``MIGRATIONS_REQUIRED`` 503 from
+ * the Flask app surfaces as "the server is waking up", which is wrong and
+ * makes the missing migrations invisible to anyone debugging the deploy.
  */
-export function friendlyErrorMessage(status?: number, serverMessage?: string): string {
+const HONEST_BACKEND_CODES: ReadonlySet<string> = new Set([
+  'MIGRATIONS_REQUIRED',
+  'DATABASE_UNAVAILABLE',
+]);
+
+export function friendlyErrorMessage(
+  status?: number,
+  serverMessage?: string,
+  errorCode?: string,
+): string {
   if (status === undefined) {
     return 'Cannot reach the GamiFrench server. Check your internet connection and try again.';
+  }
+  if (errorCode && HONEST_BACKEND_CODES.has(errorCode)) {
+    return serverMessage || 'The server reported an error. Please contact support if this keeps happening.';
   }
   if (status === 502 || status === 503 || status === 504) {
     return 'The server is waking up. Please wait a few seconds and try again.';
@@ -110,7 +129,11 @@ async function parseResponse<T>(response: Response): Promise<T> {
     //   code: body.error?.code,
     //   message: body.error?.message ?? body.message,
     // });
-    const friendly = friendlyErrorMessage(response.status, body.error?.message ?? body.message);
+    const friendly = friendlyErrorMessage(
+      response.status,
+      body.error?.message ?? body.message,
+      body.error?.code,
+    );
     console.warn(friendly);
     throw new ApiError(
       // body.error?.message ?? body.message ?? 'The server could not complete that request.',

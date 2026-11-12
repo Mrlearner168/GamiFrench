@@ -1,40 +1,40 @@
 /*
- * MODULE 9 — Speaking content (B2 business, economics & innovation)
+ * MODULE 9 — Speaking content (A2 business, money, innovation & presentations)
  */
 export const speakingContent = {
   'm9-l1-business': {
-    target: 'Le chiffre d’affaires a augmenté de dix pour cent cette année.',
-    translation: 'Revenue increased by ten percent this year.',
-    pronunciation: 'luh sheef-ruh da-fair ah ohzh-mahn-tay duh dees poor sahn set ah-nay',
-    tips: 'Deliver figures calmly and precisely; stress “dix pour cent”.',
-    phoneticIPA: '/lə ʃifʁ dafɛʁ a ɔʒmɑ̃te də di puʁ sɑ̃ sɛt‿ane/',
-    context: 'A confident line in any quarterly review meeting.',
+    target: 'Je travaille dans une petite entreprise. Nous vendons des vélos.',
+    translation: 'I work in a small company. We sell bikes.',
+    pronunciation: 'zhuh tra-vye dahn-zewn puh-teet ahn-truh-preez — noo vahn-dohn day vay-loh',
+    tips: 'Link “dans une” as “dahn-zewn”; the -ent sound of “entreprise” is nasal (ahn), and the d of “vendons” is heard.',
+    phoneticIPA: '/ʒə tʁavaj dɑ̃ z‿yn pətit ɑ̃tʁəpʁiz nu vɑ̃dɔ̃ de velo/',
+    context: 'Use it to say where you work when you meet a new colleague or customer.',
   },
 
   'm9-l2-marketing-finance': {
-    target: 'Nous pouvons négocier le prix afin de parvenir à un accord.',
-    translation: 'We can negotiate the price in order to reach an agreement.',
-    pronunciation: 'noo poo-vohn nay-go-see-yay luh pree ah-fan duh par-vuh-neer a uhn a-kor',
-    tips: 'Sound firm but cooperative; keep “parvenir à un accord” smooth.',
-    phoneticIPA: '/nu puvɔ̃ neɡɔsje lə pʁi afɛ̃ də paʁvəniʁ a œ̃ n‿akɔʁ/',
-    context: 'A diplomatic B2 negotiation opener.',
+    target: 'Ce produit coûte dix euros. Il est moins cher que l’autre.',
+    translation: 'This product costs ten euros. It is cheaper than the other one.',
+    pronunciation: 'suh proh-dwee koot dee-zuh-roh — eel ay mwan shair kuh loh-truh',
+    tips: 'Link “dix euros” with a z sound (“dee-zuh-roh”); the s of “moins” is silent.',
+    phoneticIPA: '/sə pʁɔdɥi kut di z‿øʁo il ɛ mwɛ̃ ʃɛʁ kə l‿otʁ/',
+    context: 'Use it to compare prices for a customer in a shop or at a market.',
   },
 
   'm9-l3-innovation': {
-    target: 'Notre produit apporte une vraie valeur ajoutée aux clients.',
-    translation: 'Our product brings real added value to customers.',
-    pronunciation: 'notr proh-dwee a-port ewn vreh va-lewr ah-zhoo-tay oh klee-ahn',
-    tips: 'Persuasive tone: lift your voice slightly on “vraie valeur ajoutée”.',
-    phoneticIPA: '/nɔtʁ pʁɔdui apɔʁt yn ʁɛ valœʁ aʒute o kljɑ̃/',
-    context: 'The heart of every pitch or product demo.',
+    target: 'J’ai une idée : nous allons lancer un nouveau produit.',
+    translation: 'I have an idea: we are going to launch a new product.',
+    pronunciation: 'zhay ewn-nee-day — noo-za-lohn lahn-say uhn noo-voh proh-dwee',
+    tips: 'Link “nous allons” with a z sound (“noo-za-lohn”); the t of “produit” is silent.',
+    phoneticIPA: '/ʒe yn ide nu z‿alɔ̃ lɑ̃se œ̃ nuvo pʁɔdɥi/',
+    context: 'Use it to share a new idea in a team meeting.',
   },
 
   'm9-l4-presentation': {
-    target: 'Je vais vous présenter nos résultats. Merci de votre attention.',
-    translation: 'I am going to present our results. Thank you for your attention.',
-    pronunciation: 'zhuh vay voo pray-zahn-tay noh ray-zool-tah mair-see duh votr ah-tahn-syon',
-    tips: 'Open strongly and close warmly — the B2 presentation frame.',
-    phoneticIPA: '/ʒə vɛ vu pʁezɑ̃te no ʁezylta mɛʁsi də vɔtʁ‿atɑ̃sjɔ̃/',
-    context: 'Frame your whole talk with these two sentences.',
+    target: 'Cette année, nos ventes ont augmenté. Merci de votre attention.',
+    translation: 'This year, our sales went up. Thank you for your attention.',
+    pronunciation: 'set a-nay noh vahnt ohn-tohg-mahn-tay — mair-see duh vo-tra-tahn-syohn',
+    tips: 'Link “ont augmenté” with a t sound (“ohn-tohg”) and say the g in “augmenté”; pause briefly before “Merci”.',
+    phoneticIPA: '/sɛt‿ane no vɑ̃t ɔ̃ t‿ɔɡmɑ̃te mɛʁsi də vɔtʁ‿atɑ̃sjɔ̃/',
+    context: 'Use it to give a result and close a short presentation.',
   },
 };

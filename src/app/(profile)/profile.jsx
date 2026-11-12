@@ -2,16 +2,16 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PrimaryButton, ProgressBar } from '@/components/game-ui';
+import { PrimaryButton } from '@/components/game-ui';
 import { findSubLessonById, getCountryForModule } from '@/data/lessons/catalog';
 import { isOfflineError } from '@/services/apiClient';
 import { useAuth } from '@/store/auth-context';
@@ -259,7 +259,9 @@ export default function Profile() {
   const coins = progress.coins ?? 0;
   const hearts = progress.hearts ?? 5;
   const lessonsCompleted = progress.lessonsCompleted ?? 0;
-  const overallGrade20 = Number(progress.overallAverageGrade20) || 0;
+  // The backend stores the average on the French 0-20 scale; present it as a
+  // two-decimal percentage out of 100 (80.00 = pass, 100.00 = excellent).
+  const overallGrade100 = ((Number(progress.overallAverageGrade20) || 0) * 5).toFixed(2);
 
   const frenchLevelLabel = labelFromMap(LEVEL_LABELS, learning.frenchLevel ?? user.frenchLevel, 'Beginner (A1)');
   const learningGoalLabel = labelFromMap(GOAL_LABELS, learning.learningGoal, 'General French');
@@ -291,62 +293,63 @@ export default function Profile() {
 
   const recentActivity = Array.isArray(profile?.recentActivity) ? profile.recentActivity : [];
 
-  const stats = [
-    { id: 'xp', icon: '⭐', value: String(xp), label: 'Total score' },
-    { id: 'coins', icon: '🪙', value: String(coins), label: 'Coins earned' },
-    {
-      id: 'streak',
-      icon: '🔥',
-      value: `${streak} ${streak === 1 ? 'day' : 'days'}`,
-      label: `Best streak ${longestStreak} ${longestStreak === 1 ? 'day' : 'days'}`,
-    },
-    { id: 'hearts', icon: '❤️', value: `${hearts}/5`, label: 'Hearts available' },
+  const highlights = [
+    { id: 'xp', icon: '⭐', tint: '#FEF3C7', value: String(xp), label: 'Total XP' },
     {
       id: 'grade',
       icon: '📝',
-      value: `${overallGrade20 !== null && overallGrade20 !== undefined ? overallGrade20.toFixed(2) : '—'} / 20`,
-      label: 'Average grade (0–20 scale)',
+      tint: '#EDE9FE',
+      value: overallGrade100,
+      suffix: '%',
+      label: 'Avg grade',
     },
+    { id: 'lessons', icon: '✅', tint: '#DCFCE7', value: String(lessonsCompleted), label: 'Lessons done' },
+    { id: 'stars', icon: '🌟', tint: '#FFEDD5', value: String(starsEarned), label: 'Stars earned' },
   ];
 
   const planRows = [
-    { id: 'daily', icon: '⏱️', label: 'Daily goal', value: `${dailyTargetMinutes} min / day` },
-    { id: 'goal', icon: '🎯', label: 'Learning goal', value: learningGoalLabel },
-    { id: 'level', icon: '📘', label: 'French level', value: frenchLevelLabel },
-    ...(nextLevelValue ? [{ id: 'next-level', icon: '🎓', label: 'Next level', value: nextLevelValue }] : []),
-    { id: 'lessons', icon: '✅', label: 'Lessons completed', value: String(lessonsCompleted) },
-    { id: 'member', icon: '📅', label: 'Member since', value: formatMonthYear(user.memberSince) },
-    { id: 'active', icon: '🕒', label: 'Last practice', value: formatDay(progress.lastActiveDate) },
-    { id: 'timezone', icon: '🌍', label: 'Time zone', value: learning.timezone ?? 'UTC' },
+    { id: 'daily', icon: '⏱️', tint: '#DBEAFE', label: 'Daily goal', value: `${dailyTargetMinutes} min / day` },
+    { id: 'goal', icon: '🎯', tint: '#FCE7F3', label: 'Learning goal', value: learningGoalLabel },
+    { id: 'level', icon: '📘', tint: '#E0E7FF', label: 'French level', value: frenchLevelLabel },
+    ...(nextLevelValue
+      ? [{ id: 'next-level', icon: '🎓', tint: '#FEF3C7', label: 'Next level', value: nextLevelValue, stacked: true }]
+      : []),
+    { id: 'member', icon: '📅', tint: '#DCFCE7', label: 'Member since', value: formatMonthYear(user.memberSince) },
+    { id: 'active', icon: '🕒', tint: '#F1F5F9', label: 'Last practice', value: formatDay(progress.lastActiveDate) },
+    { id: 'timezone', icon: '🌍', tint: '#CCFBF1', label: 'Time zone', value: learning.timezone ?? 'UTC' },
   ];
 
   const actions = [
     {
       id: 'journey',
       icon: '🗺️',
+      tint: '#DBEAFE',
       title: 'My journey',
-      description: 'Continue your quest and unlock the next country.',
+      description: 'Continue your quest',
       onPress: () => router.push('/journey'),
     },
     {
       id: 'achievements',
       icon: '🏆',
+      tint: '#FEF3C7',
       title: 'Achievements',
-      description: 'Review badges, milestones, and your next goal.',
+      description: 'Badges & milestones',
       onPress: () => router.push('/achievements'),
     },
     {
       id: 'settings',
       icon: '⚙️',
+      tint: '#F1F5F9',
       title: 'Settings',
-      description: 'Adjust your daily goal, audio, and preferences.',
+      description: 'Goal, audio & more',
       onPress: () => router.push('/settings'),
     },
     {
       id: 'feedback',
-      icon: '📝',
-      title: 'Share your feedback',
-      description: 'Tell us what you think of GamiFrench (10 quick questions).',
+      icon: '💬',
+      tint: '#FCE7F3',
+      title: 'Feedback',
+      description: '10 quick questions',
       onPress: () => router.push('/feedback'),
     },
     ...(session?.user?.role === 'teacher' || session?.user?.role === 'admin'
@@ -354,8 +357,9 @@ export default function Profile() {
           {
             id: 'learning-gain',
             icon: '📊',
+            tint: '#DCFCE7',
             title: 'Class results',
-            description: 'Pre-test versus post-test learning gain for your learners.',
+            description: 'Pre vs post-test gain',
             onPress: () => router.push('/learning-gain'),
           },
         ]
@@ -366,7 +370,7 @@ export default function Profile() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color={BRAND} />
           <Text style={styles.loadingText}>Loading your profile…</Text>
         </View>
       </SafeAreaView>
@@ -386,8 +390,10 @@ export default function Profile() {
     );
   }
 
+  const canGoBack = router.canGoBack?.();
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -395,170 +401,202 @@ export default function Profile() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={reload}
-            tintColor="#2563EB"
-            colors={['#2563EB']}
+            tintColor={BRAND}
+            colors={[BRAND]}
           />
         )}
       >
-        <View style={styles.header}>
-          {router.canGoBack?.() ? (
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-              activeOpacity={0.7}
-              onPress={() => router.back()}
-              style={styles.backLink}
-            >
-              <Text style={styles.backLinkText}>‹ Back</Text>
-            </TouchableOpacity>
-          ) : null}
-          <Text style={styles.pageTitle}>Profile</Text>
-          <Text style={styles.pageSubtitle}>
-            Your progress, learning plan, and account shortcuts in one place.
-          </Text>
+        {/* ============================ TOP BAR ============================= */}
+        <View style={styles.topBar}>
+          {canGoBack ? (
+            <IconButton icon="‹" label="Go back" onPress={() => router.back()} large />
+          ) : (
+            <View style={styles.iconButtonSpacer} />
+          )}
+          <Text style={styles.topBarTitle}>Profile</Text>
+          <IconButton icon="⚙️" label="Settings" onPress={() => router.push('/settings')} />
         </View>
 
         {isStale ? (
-          <View style={styles.offlineBanner}>
-            <Text style={styles.offlineBannerText}>
-              Offline — showing the progress saved on this device. It will sync
-              automatically when you reconnect.
+          <View style={[styles.banner, styles.bannerOffline]}>
+            <Text style={styles.bannerIcon}>📴</Text>
+            <Text style={[styles.bannerText, styles.bannerOfflineText]}>
+              Offline — showing the progress saved on this device. It syncs when you reconnect.
             </Text>
           </View>
         ) : null}
 
         {error ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{error}</Text>
+          <View style={[styles.banner, styles.bannerError]}>
+            <Text style={styles.bannerIcon}>⚠️</Text>
+            <Text style={[styles.bannerText, styles.bannerErrorText]}>{error}</Text>
           </View>
         ) : null}
 
         {/* ============================== HERO ============================== */}
-        <View style={styles.heroCard}>
-          <View pointerEvents="none" style={styles.heroGlow} />
+        <View style={styles.hero}>
+          <View pointerEvents="none" style={[styles.heroBubble, styles.heroBubbleA]} />
+          <View pointerEvents="none" style={[styles.heroBubble, styles.heroBubbleB]} />
+          <View pointerEvents="none" style={[styles.heroBubble, styles.heroBubbleC]} />
 
-          <View style={styles.heroTop}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{avatarEmoji}</Text>
-            </View>
-            <View style={styles.heroIdentity}>
-              <Text style={styles.heroName} numberOfLines={1}>{displayName}</Text>
-              {email ? (
-                <Text style={styles.heroEmail} numberOfLines={1}>{email}</Text>
-              ) : null}
-              <View style={styles.chipRow}>
-                <View style={styles.heroChip}>
-                  <Text style={styles.heroChipText}>🇫🇷 {frenchLevelLabel}</Text>
-                </View>
-                <View style={styles.heroChip}>
-                  <Text style={styles.heroChipText}>🎯 {learningGoalLabel}</Text>
-                </View>
+          <View style={styles.avatarWrap}>
+            <View style={styles.avatarRing}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{avatarEmoji}</Text>
               </View>
+            </View>
+            <View style={styles.levelPill}>
+              <Text style={styles.levelPillText}>LV {level}</Text>
             </View>
           </View>
 
-          <View style={styles.levelHeader}>
-            <Text style={styles.levelBadge}>Level {level}</Text>
-            <Text style={styles.levelCaption}>
+          <Text style={styles.heroName} numberOfLines={1}>{displayName}</Text>
+          {email ? <Text style={styles.heroEmail} numberOfLines={1}>{email}</Text> : null}
+
+          <View style={styles.chipRow}>
+            <View style={styles.heroChip}>
+              <Text style={styles.heroChipText}>🇫🇷 {frenchLevelLabel}</Text>
+            </View>
+            <View style={styles.heroChip}>
+              <Text style={styles.heroChipText} numberOfLines={1}>🎯 {learningGoalLabel}</Text>
+            </View>
+          </View>
+
+          <View style={styles.xpBox}>
+            <View style={styles.xpHeader}>
+              <Text style={styles.xpLevel}>Level {level}</Text>
+              <Text style={styles.xpValue}>{xp} XP</Text>
+            </View>
+            <View
+              style={styles.xpTrack}
+              accessibilityRole="progressbar"
+              accessibilityLabel={`Level ${level}, ${Math.round(levelProgress * 100)} percent to the next level`}
+            >
+              <View style={[styles.xpFill, { width: `${Math.round(levelProgress * 100)}%` }]} />
+            </View>
+            <Text style={styles.xpCaption}>
               {isMaxLevel ? 'Max level reached 🎉' : `${xpToNextLevel} XP to Level ${level + 1}`}
             </Text>
           </View>
 
-          <View style={styles.heroTrack}>
-            <View style={[styles.heroFill, { width: `${Math.round(levelProgress * 100)}%` }]} />
+          <View style={styles.heroStats}>
+            <HeroStat
+              icon="🔥"
+              value={streak}
+              label={streak === 1 ? 'day streak' : 'day streak'}
+              hint={`Best ${longestStreak}`}
+            />
+            <View style={styles.heroStatDivider} />
+            <HeroStat icon="🪙" value={coins} label="coins" />
+            <View style={styles.heroStatDivider} />
+            <HeroStat icon="❤️" value={`${hearts}/5`} label="hearts" />
           </View>
-
-          <Text style={styles.heroXpText}>
-            {xp} XP earned · {isMaxLevel ? 'Legend status' : `band ${levelStartXp}–${nextLevelXp} XP`}
-          </Text>
-          <Text style={styles.heroStreakText}>
-            🔥 {streak === 0
-              ? 'Start a streak today'
-              : `${streak}-day streak · best ${longestStreak} days`}
-          </Text>
         </View>
 
-        {/* ============================= STATS ============================== */}
-        <View style={styles.statGrid}>
-          {stats.map((stat) => (
-            <View key={stat.id} style={styles.statCard}>
-              <Text style={styles.statIcon}>{stat.icon}</Text>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
+        {/* =========================== HIGHLIGHTS =========================== */}
+        <View style={styles.tileGrid}>
+          {highlights.map((item) => (
+            <View key={item.id} style={[styles.tile, styles.tileCompact]}>
+              <View style={[styles.tileIcon, styles.tileIconCompact, { backgroundColor: item.tint }]}>
+                <Text style={styles.tileIconText}>{item.icon}</Text>
+              </View>
+              <View style={styles.rowBody}>
+                <Text style={styles.tileValue} numberOfLines={1}>
+                  {item.value}
+                  {item.suffix ? <Text style={styles.tileSuffix}>{item.suffix}</Text> : null}
+                </Text>
+                <Text style={styles.tileLabel} numberOfLines={1}>{item.label}</Text>
+              </View>
             </View>
           ))}
         </View>
 
-        {/* ======================= PROGRESS BREAKDOWN ======================= */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>📈 Progress breakdown</Text>
-
-          <View style={styles.metricGrid}>
-            <Metric label="Lessons done" value={lessonsCompleted} />
+        {/* ============================ PROGRESS ============================ */}
+        <SectionHeader title="Progress" />
+        <View style={styles.card}>
+          <View style={styles.metricRow}>
             <Metric
               label="Sub-lessons"
               value={contentTracked ? `${contentCompleted}/${contentTracked}` : contentCompleted}
             />
-            <Metric label="Average score" value={`${averageScore}%`} />
-            <Metric label="Stars earned" value={starsEarned} />
+            <View style={styles.metricDivider} />
+            <Metric label="Avg score" value={`${averageScore}%`} />
+            <View style={styles.metricDivider} />
+            <Metric label="Best score" value={bestScore ? `${bestScore}%` : '—'} />
           </View>
 
           <ProgressLine
             label="Sub-lesson completion"
             value={completionRate}
-            caption={`${Math.round(completionRate * 100)}% finished`}
+            caption={`${Math.round(completionRate * 100)}%`}
           />
           <ProgressLine
             label="Quiz accuracy"
             value={averageScore / 100}
-            caption={bestScore ? `Best score ${bestScore}%` : 'No scores yet'}
+            caption={`${averageScore}%`}
             tone="#10B981"
           />
         </View>
 
         {/* ========================== LEARNING PLAN ========================= */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>🎯 Learning plan</Text>
+        <SectionHeader title="Learning plan" />
+        <View style={[styles.card, styles.listCard]}>
           {planRows.map((row, index) => (
             <View
               key={row.id}
-              style={[styles.detailRow, index === planRows.length - 1 && styles.detailRowLast]}
+              style={[styles.listRow, index === planRows.length - 1 && styles.listRowLast]}
             >
-              <Text style={styles.detailIcon}>{row.icon}</Text>
-              <Text style={styles.detailLabel}>{row.label}</Text>
-              <Text style={styles.detailValue} numberOfLines={1}>{row.value}</Text>
+              <View style={[styles.rowIcon, { backgroundColor: row.tint }]}>
+                <Text style={styles.rowIconText}>{row.icon}</Text>
+              </View>
+              {row.stacked ? (
+                <View style={styles.rowBody}>
+                  <Text style={styles.rowLabel}>{row.label}</Text>
+                  <Text style={styles.rowStackedValue}>{row.value}</Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.rowLabel}>{row.label}</Text>
+                  <Text style={styles.rowValue} numberOfLines={2}>{row.value}</Text>
+                </>
+              )}
             </View>
           ))}
         </View>
 
         {/* ========================= RECENT ACTIVITY ======================== */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>🕒 Recent activity</Text>
+        <SectionHeader title="Recent activity" />
+        <View style={[styles.card, styles.listCard]}>
           {recentActivity.length === 0 ? (
-            <Text style={styles.emptyText}>
-              Finish a sub-lesson and your latest scores will show up here.
-            </Text>
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📚</Text>
+              <Text style={styles.emptyText}>
+                Finish a sub-lesson and your latest scores will show up here.
+              </Text>
+            </View>
           ) : (
             recentActivity.map((item, index) => {
               const details = describeContentKey(item.contentKey, item.moduleKey);
+              const score = Number(item.bestScore ?? 0);
 
               return (
                 <View
                   key={`${item.contentKey}-${index}`}
-                  style={[
-                    styles.activityRow,
-                    index === recentActivity.length - 1 && styles.detailRowLast,
-                  ]}
+                  style={[styles.listRow, index === recentActivity.length - 1 && styles.listRowLast]}
                 >
-                  <Text style={styles.activityIcon}>{details.icon}</Text>
-                  <View style={styles.activityText}>
+                  <View style={[styles.rowIcon, styles.activityIconTile]}>
+                    <Text style={styles.rowIconText}>{details.icon}</Text>
+                  </View>
+                  <View style={styles.rowBody}>
                     <Text style={styles.activityTitle} numberOfLines={1}>{details.title}</Text>
                     <Text style={styles.activityMeta} numberOfLines={1}>
                       {details.context} · {formatDay(item.completedAt)}
                     </Text>
                   </View>
                   <View style={styles.activityScore}>
-                    <Text style={styles.activityScoreValue}>{item.bestScore ?? 0}%</Text>
+                    <View style={[styles.scorePill, scorePillStyle(score)]}>
+                      <Text style={[styles.scorePillText, scorePillTextStyle(score)]}>{score}%</Text>
+                    </View>
                     <Text style={styles.activityStars}>{starsLabel(item.stars)}</Text>
                   </View>
                 </View>
@@ -567,37 +605,82 @@ export default function Profile() {
           )}
         </View>
 
-        {/* ========================== QUICK ACTIONS ========================= */}
-        <Text style={styles.standaloneTitle}>⚡ Quick actions</Text>
-        {actions.map((action) => (
-          <TouchableOpacity
-            key={action.id}
-            accessibilityRole="button"
-            accessibilityLabel={action.title}
-            activeOpacity={0.8}
-            onPress={action.onPress}
-            style={styles.actionRow}
-          >
-            <Text style={styles.actionIcon}>{action.icon}</Text>
-            <View style={styles.actionText}>
+        {/* ============================ SHORTCUTS =========================== */}
+        <SectionHeader title="Shortcuts" />
+        <View style={styles.tileGrid}>
+          {actions.map((action) => (
+            <Pressable
+              key={action.id}
+              accessibilityRole="button"
+              accessibilityLabel={action.title}
+              onPress={action.onPress}
+              style={({ pressed }) => [styles.tile, styles.actionTile, pressed && styles.pressed]}
+            >
+              <View style={[styles.tileIcon, { backgroundColor: action.tint }]}>
+                <Text style={styles.tileIconText}>{action.icon}</Text>
+              </View>
               <Text style={styles.actionTitle}>{action.title}</Text>
-              <Text style={styles.actionSubtitle}>{action.description}</Text>
-            </View>
-            <Text style={styles.actionChevron}>›</Text>
-          </TouchableOpacity>
-        ))}
+              <Text style={styles.actionSubtitle} numberOfLines={1}>{action.description}</Text>
+              <Text style={styles.actionArrow}>→</Text>
+            </Pressable>
+          ))}
+        </View>
 
-        <TouchableOpacity
+        <Pressable
           accessibilityRole="button"
           accessibilityLabel="Sign out"
-          activeOpacity={0.8}
           onPress={signOut}
-          style={styles.signOutButton}
+          style={({ pressed }) => [styles.signOutButton, pressed && styles.pressed]}
         >
           <Text style={styles.signOutButtonText}>Sign out</Text>
-        </TouchableOpacity>
+        </Pressable>
+
+        <Text style={styles.footer}>GamiFrench · member since {formatMonthYear(user.memberSince)}</Text>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/* Green from 80% (the pass mark), amber from 50%, red below. */
+function scorePillStyle(score) {
+  if (score >= 80) return styles.scorePillGood;
+  if (score >= 50) return styles.scorePillOk;
+  return styles.scorePillLow;
+}
+
+function scorePillTextStyle(score) {
+  if (score >= 80) return styles.scorePillGoodText;
+  if (score >= 50) return styles.scorePillOkText;
+  return styles.scorePillLowText;
+}
+
+function IconButton({ icon, label, onPress, large = false }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+    >
+      <Text style={large ? styles.iconButtonTextLarge : styles.iconButtonText}>{icon}</Text>
+    </Pressable>
+  );
+}
+
+function SectionHeader({ title }) {
+  return <Text style={styles.sectionTitle}>{title}</Text>;
+}
+
+function HeroStat({ icon, value, label, hint }) {
+  return (
+    <View style={styles.heroStat}>
+      <Text style={styles.heroStatValue}>
+        {icon} {value}
+      </Text>
+      <Text style={styles.heroStatLabel}>{label}</Text>
+      {hint ? <Text style={styles.heroStatHint}>{hint}</Text> : null}
+    </View>
   );
 }
 
@@ -610,424 +693,238 @@ function Metric({ label, value }) {
   );
 }
 
-function ProgressLine({ label, value, caption, tone = '#2563EB' }) {
+function ProgressLine({ label, value, caption, tone = BRAND }) {
   const safeValue = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 0;
 
   return (
     <View style={styles.progressLine}>
       <View style={styles.progressLineHeader}>
         <Text style={styles.progressLineLabel}>{label}</Text>
-        <Text style={styles.progressLineCaption}>{caption}</Text>
+        <Text style={[styles.progressLineCaption, { color: tone }]}>{caption}</Text>
       </View>
-      <ProgressBar value={safeValue} color={tone} />
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${Math.round(safeValue * 100)}%`, backgroundColor: tone }]} />
+      </View>
     </View>
   );
 }
 
+const BRAND = '#1476D4';
+const INK = '#0F172A';
+const MUTED = '#64748B';
+const SURFACE = '#FFFFFF';
+const BACKGROUND = '#F3F6FB';
+
+const cardShadow = {
+  shadowColor: '#0F172A',
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.06,
+  shadowRadius: 16,
+  elevation: 2,
+};
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  centered: {
-    flex: 1,
+  container: { flex: 1, backgroundColor: BACKGROUND },
+  content: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 48 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  loadingText: { marginTop: 14, fontSize: 15, color: MUTED },
+  errorIcon: { fontSize: 48, marginBottom: 12 },
+  errorTitle: { fontSize: 20, fontWeight: '800', color: INK, textAlign: 'center' },
+  errorText: { fontSize: 15, color: MUTED, textAlign: 'center', marginTop: 8, marginBottom: 20, lineHeight: 22 },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
+
+  /* Top bar */
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  topBarTitle: { fontSize: 18, fontWeight: '800', color: INK },
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    ...cardShadow,
   },
-  loadingText: {
-    marginTop: 14,
-    fontSize: 15,
-    color: '#58616E',
-  },
-  errorIcon: {
-    fontSize: 40,
-  },
-  errorTitle: {
-    marginTop: 12,
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1E3A8A',
-    textAlign: 'center',
-  },
-  errorText: {
-    marginTop: 8,
-    marginBottom: 20,
-    fontSize: 15,
-    color: '#58616E',
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  header: {
-    marginBottom: 18,
-  },
-  backLink: {
-    alignSelf: 'flex-start',
-    paddingVertical: 4,
-    paddingRight: 10,
-    marginBottom: 6,
-  },
-  backLinkText: {
-    color: '#2563EB',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: 'bold',
-    color: '#1E3A8A',
-  },
-  pageSubtitle: {
-    marginTop: 8,
-    fontSize: 15,
-    color: '#58616E',
-    lineHeight: 22,
-  },
-  errorBanner: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
-  },
-  errorBannerText: {
-    color: '#92400E',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  offlineBanner: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
-  },
-  offlineBannerText: {
-    color: '#1E3A8A',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  heroCard: {
-    backgroundColor: '#2563EB',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#1E3A8A',
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-  },
-  heroGlow: {
-    position: 'absolute',
-    top: -70,
-    right: -50,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  heroTop: {
-    flexDirection: 'row',
+  iconButtonSpacer: { width: 42, height: 42 },
+  iconButtonText: { fontSize: 18 },
+  iconButtonTextLarge: { fontSize: 28, lineHeight: 30, color: INK, fontWeight: '600', marginTop: -2 },
+
+  /* Banners */
+  banner: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderRadius: 16, padding: 14, marginBottom: 14 },
+  bannerIcon: { fontSize: 16, lineHeight: 20 },
+  bannerText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: '600' },
+  bannerOffline: { backgroundColor: '#FFF7E6' },
+  bannerOfflineText: { color: '#8A5A00' },
+  bannerError: { backgroundColor: '#FEF2F2' },
+  bannerErrorText: { color: '#B42318' },
+
+  /* Hero */
+  hero: {
+    backgroundColor: BRAND,
+    borderRadius: 28,
+    paddingTop: 26,
+    paddingHorizontal: 20,
+    paddingBottom: 18,
     alignItems: 'center',
+    overflow: 'hidden',
+    shadowColor: BRAND,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 22,
+    elevation: 8,
+  },
+  heroBubble: { position: 'absolute', borderRadius: 999 },
+  heroBubbleA: { width: 240, height: 240, top: -110, right: -70, backgroundColor: 'rgba(99,102,241,0.55)' },
+  heroBubbleB: { width: 180, height: 180, bottom: -70, left: -60, backgroundColor: 'rgba(56,189,248,0.35)' },
+  heroBubbleC: { width: 70, height: 70, top: 40, left: 26, backgroundColor: 'rgba(255,255,255,0.08)' },
+
+  avatarWrap: { alignItems: 'center', marginBottom: 12 },
+  avatarRing: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    padding: 4,
+    backgroundColor: 'rgba(255,255,255,0.28)',
   },
   avatar: {
-    width: 66,
-    height: 66,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    flex: 1,
+    borderRadius: 48,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
   },
-  avatarText: {
-    fontSize: 34,
-  },
-  heroIdentity: {
-    flex: 1,
-  },
-  heroName: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  heroEmail: {
-    marginTop: 3,
-    color: '#DBEAFE',
-    fontSize: 13,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 10,
-  },
-  heroChip: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
+  avatarText: { fontSize: 50 },
+  levelPill: {
+    marginTop: -14,
+    backgroundColor: '#FACC15',
     borderRadius: 999,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 4,
-    marginRight: 8,
-    marginBottom: 6,
+    borderWidth: 3,
+    borderColor: BRAND,
   },
-  heroChipText: {
-    color: '#EFF6FF',
-    fontSize: 12,
-    fontWeight: '600',
+  levelPillText: { fontSize: 12, fontWeight: '900', color: '#422006', letterSpacing: 0.5 },
+
+  heroName: { fontSize: 24, fontWeight: '900', color: '#FFFFFF', maxWidth: '100%' },
+  heroEmail: { fontSize: 14, color: 'rgba(255,255,255,0.78)', marginTop: 2, maxWidth: '100%' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 12 },
+  heroChip: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderColor: 'rgba(255,255,255,0.25)',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    maxWidth: '100%',
   },
-  levelHeader: {
+  heroChipText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+
+  xpBox: {
+    alignSelf: 'stretch',
+    marginTop: 18,
+    backgroundColor: 'rgba(15,23,42,0.18)',
+    borderRadius: 18,
+    padding: 14,
+  },
+  xpHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 },
+  xpLevel: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  xpValue: { color: '#FDE68A', fontSize: 15, fontWeight: '900' },
+  xpTrack: { height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.22)', overflow: 'hidden' },
+  xpFill: { height: '100%', borderRadius: 5, backgroundColor: '#FACC15' },
+  xpCaption: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600', marginTop: 8 },
+
+  heroStats: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', marginTop: 16 },
+  heroStat: { flex: 1, alignItems: 'center' },
+  heroStatDivider: { width: 1, height: 34, backgroundColor: 'rgba(255,255,255,0.25)' },
+  heroStatValue: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },
+  heroStatLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600', marginTop: 2 },
+  heroStatHint: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 1 },
+
+  /* Tiles (highlights + shortcuts) */
+  tileGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12, marginTop: 16 },
+  tile: {
+    width: '48.3%',
+    backgroundColor: SURFACE,
+    borderRadius: 22,
+    padding: 16,
+    ...cardShadow,
+  },
+  tileIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  tileIconText: { fontSize: 20 },
+  tileCompact: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  tileIconCompact: { marginBottom: 0 },
+  tileValue: { fontSize: 22, fontWeight: '900', color: INK },
+  tileSuffix: { fontSize: 14, fontWeight: '700', color: MUTED },
+  tileLabel: { fontSize: 13, color: MUTED, fontWeight: '600', marginTop: 2 },
+
+  actionTile: { minHeight: 132 },
+  actionTitle: { fontSize: 15, fontWeight: '800', color: INK },
+  actionSubtitle: { fontSize: 12, color: MUTED, marginTop: 3 },
+  actionArrow: { position: 'absolute', top: 16, right: 16, fontSize: 16, color: '#94A3B8', fontWeight: '700' },
+
+  /* Sections */
+  sectionTitle: { fontSize: 18, fontWeight: '900', color: INK, marginTop: 26, marginBottom: 10, marginLeft: 4 },
+  card: { backgroundColor: SURFACE, borderRadius: 22, padding: 18, ...cardShadow },
+  listCard: { paddingVertical: 6 },
+
+  metricRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  metric: { flex: 1, alignItems: 'center' },
+  metricDivider: { width: 1, height: 32, backgroundColor: '#E2E8F0' },
+  metricValue: { fontSize: 20, fontWeight: '900', color: INK },
+  metricLabel: { fontSize: 12, color: MUTED, fontWeight: '600', marginTop: 2 },
+
+  progressLine: { marginTop: 16 },
+  progressLineHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  progressLineLabel: { fontSize: 14, fontWeight: '700', color: '#334155' },
+  progressLineCaption: { fontSize: 14, fontWeight: '800' },
+  progressTrack: { height: 10, borderRadius: 5, backgroundColor: '#EEF2F7', overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 5 },
+
+  /* List rows */
+  listRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 22,
-  },
-  levelBadge: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  levelCaption: {
-    color: '#DBEAFE',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  heroTrack: {
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    overflow: 'hidden',
-    marginTop: 10,
-  },
-  heroFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#EFF6FF',
-  },
-  heroXpText: {
-    marginTop: 10,
-    color: '#DBEAFE',
-    fontSize: 13,
-  },
-  heroStreakText: {
-    marginTop: 4,
-    color: '#EFF6FF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  statGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
     gap: 12,
-  },
-  statCard: {
-    flexGrow: 1,
-    flexBasis: '46%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
-    elevation: 3,
-  },
-  statIcon: {
-    fontSize: 22,
-  },
-  statValue: {
-    marginTop: 8,
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F3E8A',
-  },
-  statLabel: {
-    marginTop: 4,
-    fontSize: 13,
-    color: '#7B8CA0',
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    marginTop: 16,
-    elevation: 3,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1E3A8A',
-    marginBottom: 14,
-  },
-  standaloneTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1E3A8A',
-    marginTop: 26,
-    marginBottom: 12,
-  },
-  metricGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 4,
-  },
-  metric: {
-    flexGrow: 1,
-    flexBasis: '46%',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 14,
     paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  metricValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F3E8A',
-  },
-  metricLabel: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#7B8CA0',
-  },
-  progressLine: {
-    marginTop: 16,
-  },
-  progressLineHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  progressLineLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  progressLineCaption: {
-    fontSize: 13,
-    color: '#64748B',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E2E8F0',
   },
-  detailRowLast: {
-    borderBottomWidth: 0,
-    paddingBottom: 0,
-  },
-  detailIcon: {
-    width: 26,
-    marginRight: 10,
-    fontSize: 18,
-    textAlign: 'center',
-  },
-  detailLabel: {
-    flex: 1,
-    fontSize: 15,
-    color: '#334155',
-  },
-  detailValue: {
-    maxWidth: '50%',
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1E3A8A',
-    textAlign: 'right',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#64748B',
-    lineHeight: 21,
-  },
-  activityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  activityIcon: {
-    fontSize: 22,
-    marginRight: 12,
-  },
-  activityText: {
-    flex: 1,
-    paddingRight: 10,
-  },
-  activityTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  activityMeta: {
-    marginTop: 4,
-    fontSize: 13,
-    color: '#64748B',
-  },
-  activityScore: {
-    alignItems: 'flex-end',
-  },
-  activityScoreValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#10B981',
-  },
-  activityStars: {
-    marginTop: 2,
-    fontSize: 12,
-    color: '#F59E0B',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 2,
-  },
-  actionIcon: {
-    fontSize: 26,
-    marginRight: 14,
-  },
-  actionText: {
-    flex: 1,
-  },
-  actionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1E3A8A',
-  },
-  actionSubtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: '#64748B',
-    lineHeight: 20,
-  },
-  actionChevron: {
-    marginLeft: 8,
-    fontSize: 24,
-    color: '#94A3B8',
-  },
+  listRowLast: { borderBottomWidth: 0 },
+  rowIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  rowIconText: { fontSize: 18 },
+  rowBody: { flex: 1 },
+  rowLabel: { fontSize: 14, fontWeight: '700', color: '#334155', flexShrink: 0 },
+  rowValue: { flex: 1, fontSize: 14, fontWeight: '700', color: INK, textAlign: 'right' },
+  rowStackedValue: { fontSize: 13, color: MUTED, marginTop: 3, lineHeight: 18 },
+
+  activityIconTile: { backgroundColor: '#EFF6FF' },
+  activityTitle: { fontSize: 15, fontWeight: '800', color: INK },
+  activityMeta: { fontSize: 12, color: MUTED, marginTop: 2 },
+  activityScore: { alignItems: 'flex-end', gap: 4 },
+  scorePill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  scorePillText: { fontSize: 13, fontWeight: '900' },
+  scorePillGood: { backgroundColor: '#DCFCE7' },
+  scorePillGoodText: { color: '#15803D' },
+  scorePillOk: { backgroundColor: '#FEF3C7' },
+  scorePillOkText: { color: '#B45309' },
+  scorePillLow: { backgroundColor: '#FEE2E2' },
+  scorePillLowText: { color: '#B91C1C' },
+  activityStars: { fontSize: 12, color: '#F59E0B', letterSpacing: 1 },
+
+  emptyState: { alignItems: 'center', paddingVertical: 18, gap: 8 },
+  emptyIcon: { fontSize: 32 },
+  emptyText: { fontSize: 14, color: MUTED, textAlign: 'center', lineHeight: 20, paddingHorizontal: 12 },
+
+  /* Sign out + footer */
   signOutButton: {
-    backgroundColor: '#FFFFFF',
+    marginTop: 28,
     borderRadius: 18,
     paddingVertical: 16,
-    marginTop: 4,
     alignItems: 'center',
-    elevation: 3,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
   },
-  signOutButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#DC2626',
-  },
+  signOutButtonText: { color: '#DC2626', fontSize: 16, fontWeight: '800' },
+  footer: { textAlign: 'center', color: '#94A3B8', fontSize: 12, marginTop: 18 },
 });
-
-
-
-
-
-

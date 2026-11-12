@@ -1,30 +1,30 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
     ActivityIndicator,
     Image,
     Keyboard,
-    KeyboardAvoidingView,
-    Platform,
     Pressable,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     useWindowDimensions,
     View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
 import { PasswordVisibilityToggle } from '@/components/password-visibility-toggle';
 import { AdminDashboardLink } from '@/components/admin-dashboard-link';
+import { PrivacyPolicyLink } from '@/components/privacy-policy-link';
 import { ServerWakeBanner } from '@/components/server-wake-banner';
 import { AuthServiceError } from '@/services/authService';
 import { useServerStatus } from '@/services/serverWarmup';
 import { useAuth } from '@/store/auth-context';
+import { setDraftEmail } from '@/store/auth-draft';
 
 const schema = z.object({
     email: z.string().trim().email('Enter a valid email address.'),
@@ -43,7 +43,7 @@ export default function Login() {
     // the fold on small phones; scale it with the screen instead.
     const logoSize = Math.round(Math.min(160, Math.max(96, height * 0.18)));
 
-    const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+    const { control, handleSubmit, getValues, formState: { errors, isSubmitting } } = useForm({
         resolver: zodResolver(schema),
         defaultValues: { email: '', password: '' },
     });
@@ -58,16 +58,20 @@ export default function Login() {
         }
     };
 
+    // Carry the email already typed over to the reset screen (in memory,
+    // never in the URL).
+    const openForgotPassword = () => {
+        setDraftEmail(getValues('email'));
+        router.push('/(auth)/forgot-password');
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
-            <KeyboardAvoidingView
-                style={styles.keyboardAvoid}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            >
                 {/* No TouchableWithoutFeedback wrapper: it swallowed scroll
                   * gestures on Android and clicks on web. Dragging the
                   * form dismisses the keyboard instead. */}
-                <ScrollView
+                <KeyboardAwareScrollView
+                    bottomOffset={24}
                     contentContainerStyle={styles.scrollContainer}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
@@ -128,6 +132,15 @@ export default function Login() {
                             />
                         </Field>
 
+                        <Text
+                            style={[styles.forgotLink, isSubmitting && styles.linkDisabled]}
+                            onPress={isSubmitting ? undefined : openForgotPassword}
+                            accessibilityRole="link"
+                            accessibilityState={{ disabled: isSubmitting }}
+                        >
+                            Forgot password?
+                        </Text>
+
                         {serverError ? (
                             <Text style={styles.serverError} accessibilityRole="alert">
                                 {serverError}
@@ -158,13 +171,17 @@ export default function Login() {
                         </Pressable>
                     </View>
 
-                    <Link href="/(auth)/register" style={styles.link} disabled={isSubmitting}>
-                        Create a student account
-                    </Link>
-
-                    <AdminDashboardLink disabled={isSubmitting} />
-                </ScrollView>
-            </KeyboardAvoidingView>
+                    {/* Small text links side by side, like "Forgot password?". */}
+                    <View style={styles.linkRow}>
+                        <Link href="/(auth)/register" style={styles.link} disabled={isSubmitting}>
+                            Create a student account
+                        </Link>
+                        <Text style={styles.linkDivider}>·</Text>
+                        <AdminDashboardLink disabled={isSubmitting} />
+                        <Text style={styles.linkDivider}>·</Text>
+                        <PrivacyPolicyLink disabled={isSubmitting} />
+                    </View>
+                </KeyboardAwareScrollView>
         </SafeAreaView>
     );
 }
@@ -200,7 +217,6 @@ function Field({ control, name, label, error, children, ...inputProps }) {
 
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: '#F7F8FC' },
-    keyboardAvoid: { flex: 1 },
     scrollContainer: { 
         flexGrow: 1, 
         padding: 24, 
@@ -277,12 +293,34 @@ const styles = StyleSheet.create({
     pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
     disabledButton: { backgroundColor: '#A0C4E8', elevation: 0, shadowOpacity: 0 },
     buttonBusy: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    link: { 
-        color: '#1476D4', 
-        textAlign: 'center', 
-        fontWeight: '700', 
+    linkRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'center',
         marginTop: 24,
-        padding: 12,
-        fontSize: 15
+    },
+    link: {
+        color: '#1476D4',
+        textAlign: 'center',
+        fontWeight: '700',
+        paddingVertical: 12,
+        paddingHorizontal: 6,
+        fontSize: 14
+    },
+    // Sits right under the password field (the form's 20px gap is pulled in).
+    forgotLink: {
+        alignSelf: 'flex-end',
+        color: '#1476D4',
+        fontWeight: '700',
+        fontSize: 14,
+        marginTop: -12,
+        paddingVertical: 4,
+        paddingLeft: 12,
+    },
+    linkDisabled: { opacity: 0.5 },
+    linkDivider: {
+        color: '#94A3B8',
+        fontSize: 14,
     },
 });

@@ -89,6 +89,13 @@ module.exports = {
       },
     ],
     [
+      // Local daily reminders (scheduled on the device, no push server).
+      'expo-notifications',
+      {
+        color: '#208AEF',
+      },
+    ],
+    [
       'expo-speech-recognition',
       {
         microphonePermission:

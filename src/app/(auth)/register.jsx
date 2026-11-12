@@ -1,24 +1,23 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link } from 'expo-router';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
     ActivityIndicator,
     Image,
     Keyboard,
-    KeyboardAvoidingView,
-    Platform,
     Pressable,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
 import { PasswordVisibilityToggle } from '@/components/password-visibility-toggle';
+import { PrivacyPolicyLink } from '@/components/privacy-policy-link';
 import { ServerWakeBanner } from '@/components/server-wake-banner';
 import { AuthServiceError } from '@/services/authService';
 import { useAuth } from '@/store/auth-context';
@@ -29,8 +28,18 @@ const schema = z.object({
     username: z.string().trim().optional(),
     gender: z.enum(['male', 'female'], { message: 'Select a gender.' }),
     email: z.string().trim().email('Enter a valid email address.'),
-    password: z.string().min(8, 'Use at least 8 characters.'),
+    // Mirrors the backend's ``valid_password`` validator in
+    // ``utils/validator.RegisterInput`` so the user sees a specific message
+    // here instead of a hidden 422 once they tap Submit.
+    password: z
+        .string()
+        .min(8, 'Use at least 8 characters.')
+        .regex(/[A-Z]/, 'Password must include an uppercase letter.')
+        .regex(/[a-z]/, 'Password must include a lowercase letter.')
+        .regex(/[\d]/, 'Password must include a number.'),
     confirmPassword: z.string(),
+    teacherEmail: z.string().trim().email('Enter a valid teacher email.').optional().or(z.literal('')),
+    teacherCode: z.string().trim().max(20, 'Teacher code is too long.').optional().or(z.literal('')),
 }).refine((values) => values.password === values.confirmPassword, {
     path: ['confirmPassword'],
     message: 'Passwords do not match.',
@@ -41,8 +50,16 @@ export default function Register() {
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [serverError, setServerError] = useState('');
+    const [teacherMethod, setTeacherMethod] = useState('code');
 
-    const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+    // A QR / deep link (gamifrench://join/CODE) lands here with the class code
+    // pre-filled, so a learner can skip typing it during registration.
+    const params = useLocalSearchParams();
+    const linkTeacherCode = Array.isArray(params.teacherCode)
+        ? params.teacherCode[0]
+        : (params.teacherCode ?? '').trim();
+
+    const { control, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm({
         resolver: zodResolver(schema),
         defaultValues: {
             firstName: '',
@@ -52,6 +69,8 @@ export default function Register() {
             email: '',
             password: '',
             confirmPassword: '',
+            teacherEmail: '',
+            teacherCode: linkTeacherCode,
         },
     });
 
@@ -69,13 +88,21 @@ export default function Register() {
         }
     };
 
+    const chooseTeacherMethod = (method) => {
+        setTeacherMethod(method);
+        // Only the active field should be sent: the backend resolves a single
+        // identifier, so clear the other one after a mid-edit toggle.
+        if (method === 'email') {
+            setValue('teacherCode', '', { shouldDirty: false, shouldValidate: false });
+        } else {
+            setValue('teacherEmail', '', { shouldDirty: false, shouldValidate: false });
+        }
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
-            <KeyboardAvoidingView
-                style={styles.keyboardAvoid}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            >
-                <ScrollView
+                <KeyboardAwareScrollView
+                    bottomOffset={24}
                     contentContainerStyle={styles.scrollContainer}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
@@ -196,6 +223,72 @@ export default function Register() {
                             />
                         </Field>
 
+                        {/* Teacher assignment (optional) */}
+                        <View style={styles.field}>
+                            <Text style={styles.label}>Teacher (optional)</Text>
+                            <View style={styles.genderRow}>
+                                <Pressable
+                                    onPress={() => chooseTeacherMethod('email')}
+                                    disabled={isSubmitting}
+                                    style={[
+                                        styles.genderOption,
+                                        teacherMethod === 'email' && styles.genderOptionSelected,
+                                    ]}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ selected: teacherMethod === 'email', disabled: isSubmitting }}
+                                    accessibilityLabel="Join by teacher email"
+                                >
+                                    <Text style={[styles.genderLabel, teacherMethod === 'email' && styles.genderLabelSelected]}>
+                                        By email
+                                    </Text>
+                                </Pressable>
+                                <Pressable
+                                    onPress={() => chooseTeacherMethod('code')}
+                                    disabled={isSubmitting}
+                                    style={[
+                                        styles.genderOption,
+                                        teacherMethod === 'code' && styles.genderOptionSelected,
+                                    ]}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ selected: teacherMethod === 'code', disabled: isSubmitting }}
+                                    accessibilityLabel="Join by class code"
+                                >
+                                    <Text style={[styles.genderLabel, teacherMethod === 'code' && styles.genderLabelSelected]}>
+                                        By class code
+                                    </Text>
+                                </Pressable>
+                            </View>
+
+                            {teacherMethod === 'email' ? (
+                                <Field
+                                    control={control}
+                                    name="teacherEmail"
+                                    label="Teacher email"
+                                    error={errors.teacherEmail?.message}
+                                    keyboardType="email-address"
+                                    autoCapitalize="none"
+                                    autoComplete="email"
+                                    autoCorrect={false}
+                                    spellCheck={false}
+                                    editable={!isSubmitting}
+                                />
+                            ) : (
+                                <Field
+                                    control={control}
+                                    name="teacherCode"
+                                    label="Teacher class code"
+                                    error={errors.teacherCode?.message}
+                                    autoCapitalize="characters"
+                                    autoComplete="off"
+                                    autoCorrect={false}
+                                    spellCheck={false}
+                                    editable={!isSubmitting}
+                                />
+                            )}
+                            <Text style={styles.hint}>
+                                Ask your teacher for their class code or email.
+                            </Text>
+                        </View>
                         {serverError ? (
                             <Text style={styles.serverError} accessibilityRole="alert">
                                 {serverError}
@@ -224,8 +317,8 @@ export default function Register() {
                     <Link href="/(auth)/login" style={styles.link} disabled={isSubmitting}>
                         Already have an account? Sign in
                     </Link>
-                </ScrollView>
-            </KeyboardAvoidingView>
+                    <PrivacyPolicyLink disabled={isSubmitting} />
+                </KeyboardAwareScrollView>
         </SafeAreaView>
     );
 }
@@ -311,7 +404,6 @@ function GenderSelector({ control, error, disabled }) {
 
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: '#F7F8FC' },
-    keyboardAvoid: { flex: 1 },
     scrollContainer: {
         flexGrow: 1,
         padding: 24,
@@ -353,6 +445,7 @@ const styles = StyleSheet.create({
     halfWidth: { flex: 1 },
     field: { gap: 6 },
     label: { color: '#344054', fontSize: 14, fontWeight: '700' },
+    hint: { color: '#647084', fontSize: 13, lineHeight: 18 },
     genderRow: { flexDirection: 'row', gap: 12 },
     genderOption: {
         flex: 1,

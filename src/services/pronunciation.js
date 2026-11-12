@@ -5,9 +5,11 @@
  * compared against the target phrase with a deterministic, symmetric text
  * comparison -- no opaque model, so the number shown is reproducible:
  *
- *   wordAccuracy = 1 - wordLevenshtein(target, heard) / max(len(target), len(heard))
+ *   wordAccuracy = order-aware alignment of heard words onto target words,
+ *                  each pair credited by its spelling similarity, divided by
+ *                  the target length plus half a point per extra word heard
  *   charAccuracy = 1 - charLevenshtein(target, heard) / max(len(target), len(heard))
- *   score        = round(100 * (0.7 * wordAccuracy + 0.3 * charAccuracy))
+ *   score        = round(100 * (0.85 * wordAccuracy + 0.15 * charAccuracy))
  *
  * Both texts are normalized first (lowercased, French accents folded,
  * punctuation dropped) so "Ça va" and "ca va" compare equal. Word accuracy
@@ -30,8 +32,22 @@ export const SPEAKING_THRESHOLD = 70;
 export const QUIZ_WEIGHT = 0.6;
 export const SPEAKING_WEIGHT = 0.4;
 
-const WORD_WEIGHT = 0.7;
-const CHAR_WEIGHT = 0.3;
+/*
+ * Words dominate: whole-sentence character similarity is lenient (one wrong
+ * word in a short sentence still shares most letters), so it only nudges.
+ */
+const WORD_WEIGHT = 0.85;
+const CHAR_WEIGHT = 0.15;
+
+/*
+ * Per-word credit. Two words whose spelling similarity is at or below
+ * WORD_FLOOR are treated as different words ("bonjour"/"bonsoir" = 0.71 ->
+ * 0.43 credit, "sous"/"sur" -> 0); above it credit rises linearly to 1.
+ */
+const WORD_FLOOR = 0.5;
+
+/** Each heard word that matches nothing costs half a target word. */
+const EXTRA_WORD_PENALTY = 0.5;
 
 /** Lowercase, fold accents, drop punctuation, collapse whitespace. */
 export function normalizeForScoring(text) {
@@ -93,53 +109,45 @@ function similarity(a, b) {
  * collapsing to a near-zero purely because nobody has signal.
  */
 
-/** Digits, including French thousands separator, to their written words. */
-const DIGIT_WORDS = [
-  'zero',
-  'un',
-  'deux',
-  'trois',
-  'quatre',
-  'cinq',
-  'six',
-  'sept',
-  'huit',
-  'neuf',
+const UNITS = [
+  'zero', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf',
+  'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize',
+  'dix sept', 'dix huit', 'dix neuf',
 ];
 
-/**
- * Written form of 0-999 in French, enough for every number a lesson card shows.
- * Handles the "quatre-vingt-dix" style where it is cheap and falls back to the
- * plain concatenation otherwise, which the phonetic pass still compares fairly.
- */
-function numberToFrenchWords(value) {
-  if (value < 0 || value > 999) return null;
+const TENS = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante'];
+
+/** 0-99 in French words (hyphens written as spaces, as tokenize() does). */
+function belowHundred(value) {
+  if (value < 20) return UNITS[value];
+
+  const tens = Math.floor(value / 10);
+  const units = value % 10;
+
+  // 70-79 = soixante + 10..19, 90-99 = quatre-vingt + 10..19.
+  if (tens === 7) {
+    return units === 1 ? 'soixante et onze' : `soixante ${UNITS[10 + units]}`;
+  }
+  if (tens === 9) return `quatre vingt ${UNITS[10 + units]}`;
+  if (tens === 8) return units === 0 ? 'quatre vingts' : `quatre vingt ${UNITS[units]}`;
+
+  if (units === 0) return TENS[tens];
+  if (units === 1) return `${TENS[tens]} et un`;
+  return `${TENS[tens]} ${UNITS[units]}`;
+}
+
+/** Written form of 0-999 in French, enough for every number a lesson card shows. */
+export function numberToFrenchWords(value) {
+  if (!Number.isInteger(value) || value < 0 || value > 999) return null;
 
   const hundreds = Math.floor(value / 100);
   const remainder = value % 100;
 
-  const parts = [];
+  if (!hundreds) return belowHundred(remainder);
 
-  if (hundreds) {
-    parts.push(hundreds === 1 ? 'cent' : `${DIGIT_WORDS[hundreds]} cent`);
-    if (remainder === 0 && hundreds > 1) parts.push('s');
-  }
-
-  if (remainder === 0) return parts.join(' ');
-
-  if (remainder < 20) {
-    parts.push(DIGIT_WORDS[remainder]);
-  } else {
-    const tens = Math.floor(remainder / 10);
-    const units = remainder % 10;
-
-    const tensWord = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante'][tens];
-    parts.push(tensWord);
-    if (units === 1) parts.push('et un');
-    else if (units) parts.push(DIGIT_WORDS[units]);
-  }
-
-  return parts.join(' ').trim();
+  // "deux cents" takes an "s" only when nothing follows it.
+  const head = hundreds === 1 ? 'cent' : `${UNITS[hundreds]} cent${remainder === 0 ? 's' : ''}`;
+  return remainder === 0 ? head : `${head} ${belowHundred(remainder)}`;
 }
 
 /**
@@ -159,8 +167,8 @@ export function normalizeFrenchPhrase(text) {
 
   return digitsExpanded
     // "j'ai" -> "je ai", "l'eau" -> "le eau", "qu'est" -> "que est", etc.
-    .replace(/\b([cdjlmnstqu])([aeiouy])'/g, '$1e $2')
     .replace(/\bqu'/g, 'que ')
+    .replace(/\b([cdjlmnst])'(?=[a-z])/g, '$1e ')
     .replace(/\bqu\(/g, 'que ')
     // "qu'est-ce que" -> "que est ce que"
     .replace(/que ce/g, 'que est ce');
@@ -177,14 +185,11 @@ function wordSimilarity(targetWord, heardWord) {
   if (targetWord === heardWord) return 1;
   if (!targetWord || !heardWord) return 0;
 
-  const trimSilent = (word) => word.replace(/[sxdt]$/, '');
+  // Only fold a silent ending off words long enough to keep a stem, so the
+  // one-letter forms "d"/"t" never collapse to "" and match each other.
+  // (No nasal folding: "comment" /kɔmɑ̃/ and "comme" /kɔm/ sound different.)
+  const trimSilent = (word) => (word.length >= 3 ? word.replace(/[sxdt]$/, '') : word);
   if (trimSilent(targetWord) === trimSilent(heardWord)) return 0.95;
-
-  // "comment" vs "comme": a trailing "nt"/"n" is not audible in French.
-  const trimNasal = (word) => word.replace(/n[ts]?$/, '');
-  if (trimNasal(targetWord) === trimNasal(heardWord) && trimNasal(targetWord).length >= 4) {
-    return 0.92;
-  }
 
   return similarity(
     [...trimSilent(targetWord)],
@@ -192,47 +197,76 @@ function wordSimilarity(targetWord, heardWord) {
   );
 }
 
+/** Credit 0..1 for one aligned pair; 0 at or below WORD_FLOOR similarity. */
+function wordCredit(targetWord, heardWord) {
+  const value = wordSimilarity(targetWord, heardWord);
+  if (value >= 1) return 1;
+  return Math.max(0, (value - WORD_FLOOR) / (1 - WORD_FLOOR));
+}
+
 /**
- * Best-match alignment of heard words onto target words.
+ * Order-aware alignment of heard words onto target words.
  *
- * The previous implementation only accepted exact hits, so one slightly
- * mis-heard word in a sentence dropped the whole score. Each target word now
- * claims its closest unused heard word and earns partial credit, and any
- * residue is reported as extra words.
+ * A weighted longest-common-subsequence: each target word pairs with at most
+ * one heard word, pairs keep the sentence order, and each pair earns its
+ * `wordCredit`. The right words in a scrambled order, or a different word
+ * that merely shares letters, no longer pass, while one slightly mis-heard
+ * word still only costs a little.
  */
 function matchWords(targetTokens, heardTokens) {
-  const remaining = heardTokens.map((word, index) => ({ word, index }));
+  const rows = targetTokens.length;
+  const cols = heardTokens.length;
+  const credit = targetTokens.map((t) => heardTokens.map((h) => wordCredit(t, h)));
+
+  const best = Array.from({ length: rows + 1 }, () => new Array(cols + 1).fill(0));
+  for (let i = 1; i <= rows; i += 1) {
+    for (let j = 1; j <= cols; j += 1) {
+      best[i][j] = Math.max(
+        best[i - 1][j],
+        best[i][j - 1],
+        best[i - 1][j - 1] + credit[i - 1][j - 1]
+      );
+    }
+  }
+
+  // Walk back to recover which heard word each target word took.
+  const pairedWith = new Array(rows).fill(null);
+  const usedHeard = new Array(cols).fill(false);
+  let i = rows;
+  let j = cols;
+  while (i > 0 && j > 0) {
+    const pairValue = credit[i - 1][j - 1];
+    if (pairValue > 0 && best[i][j] === best[i - 1][j - 1] + pairValue) {
+      pairedWith[i - 1] = j - 1;
+      usedHeard[j - 1] = true;
+      i -= 1;
+      j -= 1;
+    } else if (best[i][j] === best[i - 1][j]) {
+      i -= 1;
+    } else {
+      j -= 1;
+    }
+  }
+
   const matched = [];
   const missed = [];
-  const pairs = [];
-
-  targetTokens.forEach((targetWord) => {
-    let best = null;
-    let bestScore = 0;
-
-    remaining.forEach((candidate) => {
-      const value = wordSimilarity(targetWord, candidate.word);
-      if (value > bestScore) {
-        bestScore = value;
-        best = candidate;
-      }
-    });
-
-    // Below this the words are unrelated and counting it as "heard" would
-    // inflate the score for someone who said something else entirely.
-    if (best && bestScore >= 0.6) {
-      remaining.splice(remaining.indexOf(best), 1);
-      matched.push(targetWord);
-      pairs.push({ targetWord, heardWord: best.word, similarity: bestScore });
-    } else {
+  const pairs = targetTokens.map((targetWord, index) => {
+    const heardIndex = pairedWith[index];
+    if (heardIndex === null) {
       missed.push(targetWord);
-      pairs.push({ targetWord, heardWord: null, similarity: 0 });
+      return { targetWord, heardWord: null, similarity: 0 };
     }
+    matched.push(targetWord);
+    return {
+      targetWord,
+      heardWord: heardTokens[heardIndex],
+      similarity: credit[index][heardIndex],
+    };
   });
 
-  const extra = remaining.map((entry) => entry.word);
+  const extra = heardTokens.filter((_, index) => !usedHeard[index]);
 
-  return { matched, missed, extra, pairs };
+  return { matched, missed, extra, pairs, total: best[rows][cols] };
 }
 
 /**
@@ -251,13 +285,13 @@ export function scorePronunciation(target, transcript, { confidence = null } = {
   const words = matchWords(targetTokens, heardTokens);
 
   /*
-   * Word accuracy is now the mean per-word similarity of the best alignment
-   * rather than a raw token edit distance. That is what makes a single
-   * slightly mis-heard word cost a little, instead of collapsing the whole
-   * sentence the way a strict set comparison did.
+   * Word accuracy is the in-order alignment credit over the target length,
+   * with extra heard words counted against it: one slightly mis-heard word
+   * costs a little, while scrambling the order or padding the answer with
+   * unrelated words does not pass.
    */
   const wordAccuracy = targetTokens.length
-    ? words.pairs.reduce((total, pair) => total + pair.similarity, 0) / targetTokens.length
+    ? words.total / (targetTokens.length + EXTRA_WORD_PENALTY * words.extra.length)
     : 0;
 
   const charAccuracy = similarity(

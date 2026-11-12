@@ -367,18 +367,18 @@ export const lessonCatalog = [
 
       {
         id: 'm3-topic-4',
-        title: 'Places & Directions',
+        title: 'Where Things Are',
         type: 'directions',
         icon: '🗺️',
         description:
-          'Use prepositions and directions to explain where things are.',
+          'Use prepositions of place to explain where things are.',
 
         subLessons: [
           {
             id: 'm3-l4-prepositions',
-            title: 'In, On, Under & Directions',
+            title: 'In, On, Under & Next To',
             description:
-              'Say where objects are and give simple directions around a home.',
+              'Say where objects are in a room: in, on, under, in front of, behind, next to, between.',
           },
         ],
       },
@@ -391,7 +391,7 @@ export const lessonCatalog = [
     flag: '🇮🇹',
     level: 'A1',
     description:
-      'Master routines, hobbies, shopping, dining out, transportation, and weather forecast comprehension.',
+      'Talk about hobbies, shop for clothes, order a meal, use public transport and make small talk.',
 
         lessons: [
       {
@@ -407,25 +407,25 @@ export const lessonCatalog = [
             id: 'm4-l1-hobbies',
             title: 'Hobbies & Free Time',
             description:
-              'Name activities like reading, music, sports, cooking and photography.',
+              'Name activities like reading, music, films, sport and cooking, and say what you love or hate.',
           },
         ],
       },
 
       {
         id: 'm4-topic-2',
-        title: 'Colors, Clothes & Shopping',
+        title: 'Clothes Shopping',
         type: 'shopping',
         icon: '🛍️',
         description:
-          'Name colors and clothes, ask prices, and shop politely.',
+          'Ask for sizes and colours, try clothes on, and buy what you like.',
 
         subLessons: [
           {
             id: 'm4-l2-shopping',
-            title: 'Shopping & Prices',
+            title: 'Shopping for Clothes',
             description:
-              'Ask where to find things, how much they cost, and how to bargain.',
+              'Ask for a size or colour, try things on, ask the price and say "Je le prends".',
           },
         ],
       },
@@ -436,14 +436,14 @@ export const lessonCatalog = [
         type: 'food',
         icon: '🥐',
         description:
-          'Order at cafés and restaurants and ask for the bill.',
+          'Order a full meal: starter, main course, dessert and a drink.',
 
         subLessons: [
           {
             id: 'm4-l3-dining-out',
-            title: 'Ordering Food & Dining Out',
+            title: 'Ordering a Meal',
             description:
-              'Book a table, read a menu, order politely, and compliment the meal.',
+              'Name the parts of a meal and order with je prends, comme and pour moi.',
           },
         ],
       },
@@ -454,7 +454,7 @@ export const lessonCatalog = [
         type: 'transport',
         icon: '🚌',
         description:
-          'Buy tickets, validate them, ask directions, and get off at stops.',
+          'Buy and validate tickets, ask where a bus goes, and get off at your stop.',
 
         subLessons: [
           {
@@ -479,7 +479,7 @@ export const lessonCatalog = [
             id: 'm4-l5-weather-social',
             title: 'Weather & Small Talk',
             description:
-              'Describe sunshine, rain, seasons, and link weather to plans.',
+              'Talk about sun, wind and bad weather, make small talk and link weather to plans.',
           },
         ],
       },
@@ -490,9 +490,9 @@ export const lessonCatalog = [
     id: 'module-5',
     title: 'Travel, Health & Real-Life Situations',
     flag: '🇨🇲',
-    level: 'A2',
+    level: 'A1',
     description:
-      'Handle airport procedures, hotel bookings, health symptoms, doctor appointments, and urgent emergencies.',
+      'Find your gate, check in at a hotel, say where it hurts, order safely and pay in euros.',
 
         lessons: [
       {
@@ -551,14 +551,14 @@ export const lessonCatalog = [
             id: 'm5-l4-restaurants',
             title: 'Restaurants & Menu Reading',
             description:
-              'Order starters, mains and desserts, and ask for advice.',
+              'Read the menu, order each course, ask for advice and mention allergies.',
           },
 
           {
             id: 'm5-l5-numbers-prices',
             title: 'Numbers & Prices',
             description:
-              'Count to 100 and understand euros, centimes and totals.',
+              'Count from 30 to 100 and say prices in euros and cents.',
           },
         ],
       },
@@ -569,7 +569,7 @@ export const lessonCatalog = [
     id: 'module-6',
     title: 'Education, Work & Technology',
     flag: '🇧🇪',
-    level: 'A2',
+    level: 'A1+',
     description:
       'Workplace communication, schedules, technical terms, digital devices, instructions, and past/future tenses.',
 
@@ -587,7 +587,7 @@ export const lessonCatalog = [
             id: 'm6-l1-workplace',
             title: 'At Work',
             description:
-              'Say where you work, your hours, meetings and holidays.',
+              'Say what job you do, where you work and your working hours.',
           },
 
           {
@@ -630,12 +630,12 @@ export const lessonCatalog = [
             id: 'm6-l4-past-future',
             title: 'Yesterday & Tomorrow',
             description:
-              'Tell what you did and what you will do with easy markers.',
+              'Say what you did (j\'ai travaillé) and what you are going to do (je vais travailler).',
           },
 
           {
             id: 'm6-l5-instructions',
-            title: 'Instructions & Directions',
+            title: 'Instructions at Work',
             description:
               'Follow steps, ask someone to repeat, and confirm politely.',
           },
@@ -648,9 +648,9 @@ export const lessonCatalog = [
     id: 'module-7',
     title: 'Media, Society & Opinions',
     flag: '🇨🇭',
-    level: 'B1',
+    level: 'A1+',
     description:
-      'Engage with news stories, environmental issues, express nuanced opinions, and form hypotheses.',
+      'Talk about the news and the environment, give simple opinions, and agree or disagree.',
 
         lessons: [
       {
@@ -666,7 +666,7 @@ export const lessonCatalog = [
             id: 'm7-l1-news',
             title: 'Talking About the News',
             description:
-              'Name media, react to a story, and understand headlines.',
+              'Name media, say what you read or watch, and react to a story.',
           },
 
           {
@@ -684,7 +684,7 @@ export const lessonCatalog = [
         type: 'opinion',
         icon: '💬',
         description:
-          'Express nuanced opinions and build balanced arguments.',
+          'Give simple opinions, agree or disagree, and compare pros and cons.',
 
         subLessons: [
           {
@@ -698,7 +698,7 @@ export const lessonCatalog = [
             id: 'm7-l4-debate',
             title: 'Agreeing, Disagreeing & Debating',
             description:
-              'Weigh advantages and drawbacks and conclude with confidence.',
+              'Accept a point, add "mais", name an advantage or a problem, and conclude.',
           },
         ],
       },
@@ -709,9 +709,9 @@ export const lessonCatalog = [
     id: 'module-8',
     title: 'French Culture & Professional Communication',
     flag: '🇲🇨',
-    level: 'B1',
+    level: 'A2',
     description:
-      'Francophone arts, music, traditions, storytelling, career objectives, and professional interview simulations.',
+      'Francophone arts, music and traditions, then your studies, career plans and polite job-interview French.',
 
         lessons: [
       {
@@ -752,7 +752,7 @@ export const lessonCatalog = [
             id: 'm8-l3-career',
             title: 'Career Goals & Studies',
             description:
-              'Talk about your path, training, internships and motivation.',
+              'Talk about jobs, your studies, training, internships and plans.',
           },
 
           {
@@ -770,32 +770,32 @@ export const lessonCatalog = [
     id: 'module-9',
     title: 'Business, Economics & Innovation',
     flag: '🇱🇺',
-    level: 'B2',
+    level: 'A2',
     description:
-      'Corporate strategy, finance, marketing, contract negotiations, and executive presentations.',
+      'Simple business French: companies and customers, prices and money, new ideas and a short presentation.',
 
         lessons: [
       {
         id: 'm9-topic-1',
-        title: 'Business & Finance',
+        title: 'Business & Money',
         type: 'business',
         icon: '📊',
         description:
-          'Discuss companies, results, budgets and negotiations.',
+          'Talk about companies, customers, prices and advertising.',
 
         subLessons: [
           {
             id: 'm9-l1-business',
-            title: 'Companies & Strategy',
+            title: 'Companies & Customers',
             description:
-              'Talk about revenue, growth, profit and markets.',
+              'Companies, customers, products, buying, selling and meetings.',
           },
 
           {
             id: 'm9-l2-marketing-finance',
-            title: 'Marketing, Finance & Negotiation',
+            title: 'Marketing & Money',
             description:
-              'Budgets, targets, investments and closing deals.',
+              'Prices, money, advertising, going up or down, and comparing.',
           },
         ],
       },
@@ -806,21 +806,21 @@ export const lessonCatalog = [
         type: 'innovation',
         icon: '🚀',
         description:
-          'Pitch ideas, launch products and present results like a leader.',
+          'Share new ideas, launch products and give a short presentation.',
 
         subLessons: [
           {
             id: 'm9-l3-innovation',
-            title: 'Innovation & Technology in Business',
+            title: 'Ideas & New Products',
             description:
-              'Startups, new products and competitive value.',
+              'Ideas, projects, startups, il faut and the futur proche.',
           },
 
           {
             id: 'm9-l4-presentation',
-            title: 'Business Presentations & Reports',
+            title: 'A Short Presentation',
             description:
-              'Open, present figures, contrast trends and close well.',
+              'Open, order your talk, show sales results and close politely.',
           },
         ],
       },
@@ -829,59 +829,59 @@ export const lessonCatalog = [
 
   {
     id: 'module-10',
-    title: 'Advanced French: Global Society & Debate',
+    title: 'The World & Final Review',
     flag: '🇫🇷',
-    level: 'B2',
+    level: 'A2',
     description:
-      'Globalization, ethical debates, media bias analysis, rhetoric, and complete mastery evaluation.',
+      'The world, values and the media in simple French, then a final review of the whole course.',
 
         lessons: [
       {
         id: 'm10-topic-1',
-        title: 'Global Society & Ethics',
+        title: 'The World & Values',
         type: 'society',
         icon: '🌍',
         description:
-          'Debate globalization, sustainability and ethical questions.',
+          'Talk about the world, compare countries and give opinions about values.',
 
         subLessons: [
           {
             id: 'm10-l1-globalization',
-            title: 'Globalization & Global Issues',
+            title: 'The World & Globalization',
             description:
-              'Discuss a connected world, inequality and sustainability.',
+              'Countries, cultures, the planet, and comparing with plus / moins … que.',
           },
 
           {
             id: 'm10-l2-ethics',
-            title: 'Ethics & Debating Values',
+            title: 'Values & Opinions',
             description:
-              'Express doubt, conviction and values with nuance.',
+              'Je pense que, à mon avis, parce que, agreeing and disagreeing.',
           },
         ],
       },
 
       {
         id: 'm10-topic-2',
-        title: 'Media Analysis & Mastery',
+        title: 'Media & Final Review',
         type: 'media',
         icon: '🔎',
         description:
-          'Analyse bias, argue with connectors, and master French.',
+          'Talk about the news and review everything you learned.',
 
         subLessons: [
           {
             id: 'm10-l3-media-analysis',
-            title: 'Analysing Media & Bias',
+            title: 'The News & Social Media',
             description:
-              'Facts vs opinions, reliable sources and social media.',
+              'The news, true or false, facts vs opinions, and j\'ai lu / j\'ai regardé.',
           },
 
           {
             id: 'm10-l4-mastery',
             title: 'Final Mastery Challenge',
             description:
-              'Structure and deliver a complete advanced argument.',
+              'Introduce yourself, your past and your plans, and give a reason with parce que.',
           },
         ],
       },

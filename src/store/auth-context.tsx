@@ -1,15 +1,21 @@
-import * as SecureStore from 'expo-secure-store';
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { ApiError, apiRequest } from '@/services/apiClient';
 import { authService } from '@/services/authService';
+import {
+  cachedProgressRequest,
+  invalidateProgressCache,
+  isProgressRead,
+} from '@/services/progressRequestCache';
 import { decodeAccessTokenClaims } from '@/services/tokenValidation';
+import { cancelDailyReminders } from '@/services/dailyReminder';
 import { lockAudio, unlockAudio } from '@/services/sound';
 import { setChallengeScope } from '@/store/challenge-progress';
 import { setLessonProgressScope } from '@/store/lesson-progress';
 import { setPendingSyncScope } from '@/store/pending-sync';
 import { setProfileCacheScope } from '@/store/profile-cache';
+import { storageDelete, storageGet, storageSet } from '@/store/storage';
 import type { AuthCredentials, AuthSession, RegistrationInput } from '@/types/auth';
 
 const SESSION_KEY = 'gamifrench.session';
@@ -53,7 +59,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 async function readSession() {
   try {
-    const value = await SecureStore.getItemAsync(SESSION_KEY);
+    const value = await storageGet(SESSION_KEY);
     console.log('[Auth] stored session read', { hasValue: Boolean(value) });
     return value ? (JSON.parse(value) as AuthSession) : null;
   } catch (error) {
@@ -65,14 +71,14 @@ async function readSession() {
 async function writeSession(session: AuthSession | null) {
   try {
     if (session) {
-      await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(session));
+      await storageSet(SESSION_KEY, JSON.stringify(session));
     } else {
-      await SecureStore.deleteItemAsync(SESSION_KEY);
+      await storageDelete(SESSION_KEY);
     }
     console.log('[Auth] stored session written', { hasSession: Boolean(session) });
   } catch (error) {
     console.log('[Auth] failed to write stored session', error);
-    // Secure storage can be unavailable in web preview; the session remains in memory.
+    // Storage can be unavailable (private web modes); the session remains in memory.
   }
 }
 
@@ -110,6 +116,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const scopeId = session?.user?.id ?? null;
 
   useMemo(() => {
+    invalidateProgressCache();
     setLessonProgressScope(scopeId);
     setChallengeScope(scopeId);
     setPendingSyncScope(scopeId);
@@ -171,6 +178,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await applySession(null);
     // Back to silence: stop music, block all SFX until the next login.
     lockAudio();
+    // No "keep your streak" nudges for an account that signed out.
+    cancelDailyReminders().catch(() => {});
     console.log('[AuthProvider] signOut complete');
   }, [applySession]);
 
@@ -229,7 +238,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, [refreshSession]);
 
-  const authenticatedRequest = useCallback(async <T,>(path: string, options: RequestInit = {}) => {
+  const sendAuthenticatedRequest = useCallback(async <T,>(path: string, options: RequestInit = {}) => {
     let current = sessionRef.current;
     if (!current) throw new ApiError('Authentication is required.', 401, 'UNAUTHORIZED');
 
@@ -269,6 +278,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return apiRequest<T>(path, options, next.accessToken);
     }
   }, [refreshSession]);
+
+  /*
+   * `GET /progress` is shared across screens for a few seconds (see
+   * services/progressRequestCache.ts); any write drops that copy so the next
+   * read reflects it.
+   */
+  const authenticatedRequest = useCallback(async <T,>(path: string, options: RequestInit = {}) => {
+    if (isProgressRead(path, options)) {
+      return cachedProgressRequest<T>(sessionRef.current?.user?.id ?? null, () =>
+        sendAuthenticatedRequest<T>(path, options)
+      );
+    }
+    const method = (options.method ?? 'GET').toUpperCase();
+    try {
+      return await sendAuthenticatedRequest<T>(path, options);
+    } finally {
+      if (method !== 'GET') invalidateProgressCache();
+    }
+  }, [sendAuthenticatedRequest]);
 
   /*
    * Coming back to the app after a break: refresh right away, while the

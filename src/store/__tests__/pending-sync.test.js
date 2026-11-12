@@ -14,8 +14,10 @@ jest.mock('@/store/local-store', () => ({
 }));
 
 import {
+  enqueueChallengeClaim,
   enqueueContentProgress,
   flushPendingSync,
+  pendingCount,
   setPendingSyncScope,
 } from '@/store/pending-sync';
 
@@ -117,5 +119,29 @@ describe('queued sub-lesson attempts', () => {
     expect(call.body.contentKey).toBe('m1-l2-vowels');
     expect(call.body.score).toBe(75);
     expect(call.body).not.toHaveProperty('answers');
+  });
+});
+
+describe('queued challenge claims', () => {
+  const failWith = (status) =>
+    jest.fn().mockRejectedValue(Object.assign(new Error('refused'), { status }));
+
+  it('stay queued while the server has no /challenges/claim yet (404)', async () => {
+    await enqueueChallengeClaim({ challengeId: 'daily-quick-win', periodKey: '2026-11-05' });
+
+    await flushPendingSync(failWith(404));
+    expect(await pendingCount()).toBe(1);
+
+    const send = jest.fn().mockResolvedValue({});
+    expect(await flushPendingSync(send)).toBe(1);
+    expect(send).toHaveBeenCalledWith('/challenges/claim', expect.objectContaining({ method: 'POST' }));
+    expect(await pendingCount()).toBe(0);
+  });
+
+  it('are dropped on a final refusal (409)', async () => {
+    await enqueueChallengeClaim({ challengeId: 'daily-quick-win', periodKey: '2026-11-05' });
+
+    await flushPendingSync(failWith(409));
+    expect(await pendingCount()).toBe(0);
   });
 });

@@ -127,6 +127,23 @@ export default function Journey() {
       };
 
       const loadProgress = async () => {
+        /*
+         * Every path below (server answer, server error, offline copy) must
+         * end the loading state, so it is cleared once, in the outer
+         * `finally`. It used to be cleared only on the offline path, which
+         * left the loader on screen forever whenever the server answered.
+         */
+        try {
+          await loadFromServerOrDevice();
+        } catch (error) {
+          console.log('[Journey] could not load progress', error);
+          if (mounted) setIsError(true);
+        } finally {
+          if (mounted) setIsLoading(false);
+        }
+      };
+
+      const loadFromServerOrDevice = async () => {
         const storedClaims = await loadClaimedMissions();
 
         try {
@@ -190,10 +207,6 @@ export default function Journey() {
               // Without lesson progress the journey falls back to the first
               // stage that still has missions to collect.
               syncStageWithProgress(null, storedClaims);
-            }
-          } finally {
-            if (mounted) {
-              setIsLoading(false);
             }
           }
         }

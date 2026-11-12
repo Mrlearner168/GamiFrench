@@ -1,40 +1,40 @@
 /*
- * MODULE 8 — Speaking content (B1 culture & professional communication)
+ * MODULE 8 — Speaking content (A1+/A2 culture & professional communication)
  */
 export const speakingContent = {
   'm8-l1-culture': {
-    target: 'Je te recommande ce film français, je l’ai adoré.',
-    translation: 'I recommend this French film, I loved it.',
-    pronunciation: 'zhuh tuh ruh-koh-mahnd suh feelm frahn-say zhuh lay ah-doh-ray',
-    tips: 'Warm and enthusiastic: stress “je l’ai adoré” with a smile in your voice.',
-    phoneticIPA: '/ʒə tə ʁəkɔ̃mɑ̃d sə film fʁɑ̃sɛ ʒə le adɔʁe/',
-    context: 'Share a favourite film with a friend naturally.',
+    target: 'J’ai vu un film français. J’ai adoré ! Je te recommande ce film.',
+    translation: 'I watched a French film. I loved it! I recommend this film to you.',
+    pronunciation: 'zhay vew uhn feelm frahn-say — zhay a-do-ray — zhuh tuh ruh-ko-mahnd suh feelm',
+    tips: 'Do not pronounce the s of “français”. In “recommande” the “om” is not nasal: say “ruh-ko-mahnd”. Keep “vu” with rounded lips (ew, not oo).',
+    phoneticIPA: '/ʒe vy œ̃ film fʁɑ̃sɛ ʒe adɔʁe ʒə tə ʁəkɔmɑ̃d sə film/',
+    context: 'Use it to tell a friend about a film you enjoyed.',
   },
 
   'm8-l2-traditions': {
-    target: 'Le 14 juillet, venez fêter avec nous, il y a des feux d’artifice !',
-    translation: 'On July 14, come and celebrate with us, there are fireworks!',
-    pronunciation: 'luh ka-torz zhwee-yay vuh-nay fet-tay ah-vek noo eel ya day fuh dar-tee-fees',
-    tips: 'Invite with energy; keep “feux d’artifice” light and playful.',
-    phoneticIPA: '/lə katɔʁʒ ʒɥijɛ vəne fɛte avɛk nu il ja de fø daʁtifis/',
-    context: 'An enthusiastic invitation to a French national celebration.',
+    target: 'Le 14 juillet, il y a des feux d’artifice. Venez fêter avec nous !',
+    translation: 'On July 14, there are fireworks. Come and celebrate with us!',
+    pronunciation: 'luh ka-torz zhwee-yay eel ya day fuh dar-tee-fees — vuh-nay feh-tay a-vek noo',
+    tips: 'Say the number: “quatorze”, with a clear z. In “juillet” the “ui” glides quickly: “zhwee-yay”. Do not pronounce the z of “Venez”.',
+    phoneticIPA: '/lə katɔʁz ʒɥijɛ il ja de fø daʁtifis vəne fɛte avɛk nu/',
+    context: 'Use it to invite friends or neighbours to a celebration.',
   },
 
   'm8-l3-career': {
-    target: 'Mon objectif est de devenir ingénieur. Ce qui me motive, c’est apprendre.',
-    translation: 'My goal is to become an engineer. What motivates me is learning.',
-    pronunciation: 'mohn ob-zhek-teef ay duh duh-vuh-neer an-zhay-nyur suh kee muh mo-teev set ah-prahn-druh',
-    tips: 'Two clear sentences: goal first, motivation second. Speak with calm confidence.',
-    phoneticIPA: '/mɔ̃ nɔbʒɛktif ɛ də dəvəniʁ ɑ̃ʒenjœʁ sə ki mə mɔtiv sɛt‿apʁɑ̃dʁ/',
-    context: 'The core of any good interview answer about your future.',
+    target: 'Je voudrais être ingénieur. Je vais faire un stage à Paris.',
+    translation: 'I would like to be an engineer. I am going to do an internship in Paris.',
+    pronunciation: 'zhuh voo-dray etr an-zhay-nyuhr — zhuh vay fair uhn stahzh a pa-ree',
+    tips: '“Ingénieur” starts with a nasal “in” (like “an” in “sang”), not “ahn”. Do not pronounce the s of “voudrais” or “Paris”.',
+    phoneticIPA: '/ʒə vudʁɛ ɛtʁ ɛ̃ʒenjœʁ ʒə vɛ fɛʁ œ̃ staʒ a paʁi/',
+    context: 'Use it to present your career plan to a teacher or an employer.',
   },
 
   'm8-l4-interview': {
-    target: 'Bonjour, Madame, Monsieur. Je reste à votre disposition pour un entretien.',
-    translation: 'Hello, Dear Sir or Madam. I remain available for an interview.',
-    pronunciation: 'bohn-zhoor ma-dam muh-syuh zhuh rest a votr dis-po-zi-syon poor un-nah-truh-tyan',
-    tips: 'Formal and steady: pronounce every syllable of “disposition”.',
-    phoneticIPA: '/bɔ̃ʒuʁ madam məsjø ʒə ʁɛst a vɔtʁ dispɔzisjɔ̃ puʁ œ̃ nɑ̃tʁətjɛ̃/',
-    context: 'A polished professional closing for emails or calls.',
+    target: 'Je suis très motivé. Je parle français et anglais.',
+    translation: 'I am very motivated. I speak French and English.',
+    pronunciation: 'zhuh swee tray mo-tee-vay — zhuh parl frahn-say ay ahn-gleh',
+    tips: 'A woman writes “motivée”, but it sounds the same. Never link “et” to the next word, and do not pronounce the final s of “français” or “anglais”.',
+    phoneticIPA: '/ʒə sɥi tʁɛ mɔtive ʒə paʁl fʁɑ̃sɛ e ɑ̃ɡlɛ/',
+    context: 'Use it to answer “Parlez-moi de vous” in a job interview.',
   },
 };

@@ -17,6 +17,16 @@ export const SERVER_ASLEEP_MESSAGE =
 export const OFFLINE_SIGN_IN_MESSAGE =
   "You're offline. Connect to the internet to sign in — once signed in, lessons keep working offline.";
 
+/*
+ * Password reset by email. The screen and this call are ready, but the server
+ * does not send reset emails yet, so it is switched off: learners are told to
+ * ask their admin instead. Flip to `true` once `POST /auth/forgot-password`
+ * exists on the backend.
+ */
+export const PASSWORD_RESET_AVAILABLE = false;
+export const PASSWORD_RESET_UNAVAILABLE_MESSAGE =
+  "Resetting your password by email isn't available yet. Please contact your admin to reset it.";
+
 const wakeFailureMessage = () => (isDeviceOffline() ? OFFLINE_SIGN_IN_MESSAGE : SERVER_ASLEEP_MESSAGE);
 
 /*
@@ -66,6 +76,17 @@ export const authService = {
     return authRequest<AuthSession>('/auth/refresh', {
       method: 'POST',
       body: JSON.stringify({ refreshToken }),
+    });
+  },
+
+  /** Ask the server to email a reset link (unavailable for now, see above). */
+  requestPasswordReset(email: string) {
+    if (!PASSWORD_RESET_AVAILABLE) {
+      return Promise.reject(new AuthServiceError(PASSWORD_RESET_UNAVAILABLE_MESSAGE, 503));
+    }
+    return authRequest<{ sent: boolean }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email: email.trim() }),
     });
   },
 };

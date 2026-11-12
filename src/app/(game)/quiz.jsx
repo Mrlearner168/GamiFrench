@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { HeartShop } from '@/components/heart-shop';
 import { isColdStartError } from '@/services/apiClient';
 import { readCachedAssessment, saveCachedAssessment } from '@/store/assessment-cache';
 import { useAuth } from '@/store/auth-context';
@@ -86,7 +87,10 @@ export default function Quiz() {
     : null;
 
   // Set when the server refuses a final quiz because the learner has 0 hearts.
+  // It also carries the heart shop price and coins, updated after a purchase.
   const [outOfHearts, setOutOfHearts] = useState(null);
+  // Bumped to load the quiz again once a heart was bought.
+  const [reloadKey, setReloadKey] = useState(0);
 
   // The answer just tapped: highlighted for a beat before the next question,
   // and every other tap is ignored meanwhile (no double answers).
@@ -182,7 +186,7 @@ export default function Quiz() {
       });
 
     return () => { active = false; };
-  }, [authenticatedRequest, safeModule, assessmentKey]);
+  }, [authenticatedRequest, safeModule, assessmentKey, reloadKey]);
 
   // Log question changes when the learner advances. The token-selection
   // reset is done in submitAnswer (where `current` actually changes) instead
@@ -216,18 +220,41 @@ export default function Quiz() {
         params: { country: safeCountry ?? 'Canada', module: safeModule ?? 'module-1' },
       });
 
+    const heartsLeft = Number(outOfHearts.hearts ?? 0);
+    const startQuiz = () => {
+      setOutOfHearts(null);
+      setReloadKey((value) => value + 1);
+    };
+
     return (
       <SafeAreaView style={styles.centerContainer}>
-        <Text style={styles.heartsIcon}>💔</Text>
-        <Text style={styles.heartsTitle}>Out of hearts</Text>
+        <Text style={styles.heartsIcon}>{heartsLeft > 0 ? '❤️' : '💔'}</Text>
+        <Text style={styles.heartsTitle}>
+          {heartsLeft > 0 ? `You have ${heartsLeft} ${heartsLeft === 1 ? 'heart' : 'hearts'}` : 'Out of hearts'}
+        </Text>
         <Text style={styles.heartsText}>
           Each wrong answer in a final quiz costs a heart, and one heart comes back
           every {outOfHearts.heartRefillMinutes ?? 30} minutes.
           {wait ? ` Your next heart arrives in about ${wait} min.` : ''}
         </Text>
-        <Text style={styles.heartsText}>Review the lessons while you wait — then come back and ace it!</Text>
-        <TouchableOpacity style={styles.heartsButton} activeOpacity={0.8} onPress={reviewLessons}>
-          <Text style={styles.heartsButtonText}>Review Lessons</Text>
+        {heartsLeft > 0 ? (
+          <TouchableOpacity style={styles.heartsButton} activeOpacity={0.8} onPress={startQuiz}>
+            <Text style={styles.heartsButtonText}>Start the Quiz</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.heartsText}>Review the lessons while you wait — or use your coins.</Text>
+        )}
+        <HeartShop
+          shop={outOfHearts}
+          request={authenticatedRequest}
+          onBought={(result) => setOutOfHearts((current) => ({ ...current, ...result }))}
+        />
+        <TouchableOpacity
+          style={heartsLeft > 0 ? styles.heartsSecondary : styles.heartsButton}
+          activeOpacity={0.8}
+          onPress={reviewLessons}
+        >
+          <Text style={heartsLeft > 0 ? styles.heartsSecondaryText : styles.heartsButtonText}>Review Lessons</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.heartsSecondary} activeOpacity={0.8} onPress={() => router.replace('/home')}>
           <Text style={styles.heartsSecondaryText}>Back to Map</Text>

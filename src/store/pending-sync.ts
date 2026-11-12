@@ -348,13 +348,15 @@ export async function flushPendingSync(send: RequestSender) {
       // A definite refusal (e.g. 409 MISSION_NOT_COMPLETE, 422 invalid) will
       // never succeed on a retry, so it is dropped instead of blocking the
       // queue forever. Connection problems, 401 (token refresh), 408, 429 and
-      // 5xx stay queued for the next flush.
+      // 5xx stay queued for the next flush. So does 404: the server answers it
+      // only when the endpoint itself is missing (an older deploy, e.g. before
+      // /challenges/claim existed), and the work must survive until it ships.
       const status = (error as { status?: number })?.status;
       const refused =
         typeof status === 'number' &&
         status >= 400 &&
         status < 500 &&
-        ![401, 408, 429].includes(status);
+        ![401, 404, 408, 429].includes(status);
       if (refused) {
         // console.warn(`[Sync] Server refused a queued ${operation.kind} (${status}); dropping it.`);
         console.warn('Some offline progress could not be saved. Replaying that activity will record it again.');

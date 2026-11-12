@@ -1,0 +1,93 @@
+{
+    "compilerOptions": {
+        "allowJs": true,
+        "esModuleInterop": true,
+        "jsx": "react-jsx",
+        "lib": [
+            "dom",
+            "esnext"
+        ],
+        "module": "preserve",
+        "moduleDetection": "force",
+        "moduleResolution": "bundler",
+        "customConditions": [
+            "react-native"
+        ],
+        "noEmit": true,
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "target": "esnext",
+        "strict": true,
+        "paths": {
+            "@/*": [
+                "./src/*"
+            ],
+            "@/assets/*": [
+                "./assets/*"
+            ]
+        }
+    },
+    "files": [
+        "./expo-env.d.ts",
+        "./src/constants/theme.ts",
+        "./src/hooks/use-app-warmup.ts",
+        "./src/hooks/use-color-scheme.ts",
+        "./src/hooks/use-color-scheme.web.ts",
+        "./src/hooks/use-theme.ts",
+        "./src/services/apiClient.ts",
+        "./src/services/authService.ts",
+        "./src/services/connectivity.ts",
+        "./src/services/onDeviceAsr.ts",
+        "./src/services/progressRequestCache.ts",
+        "./src/services/recommendations.ts",
+        "./src/services/serverWarmup.ts",
+        "./src/services/teacherService.ts",
+        "./src/services/tokenValidation.ts",
+        "./src/services/transcription.ts",
+        "./src/services/whisperEngine.ts",
+        "./src/services/__tests__/recommendations.test.ts",
+        "./src/store/assessment-cache.ts",
+        "./src/store/local-store.ts",
+        "./src/store/pending-sync.ts",
+        "./src/store/profile-cache.ts",
+        "./src/store/storage.ts",
+        "./src/store/sync-engine.ts",
+        "./src/types/auth.ts",
+        "./src/app/_layout.tsx",
+        "./src/app/index.tsx",
+        "./src/app/(auth)/_layout.tsx",
+        "./src/app/(game)/_layout.tsx",
+        "./src/app/(profile)/_layout.tsx",
+        "./src/components/admin-dashboard-link.tsx",
+        "./src/components/animated-icon.tsx",
+        "./src/components/animated-icon.web.tsx",
+        "./src/components/app-tabs.tsx",
+        "./src/components/app-tabs.web.tsx",
+        "./src/components/external-link.tsx",
+        "./src/components/hint-row.tsx",
+        "./src/components/password-visibility-toggle.tsx",
+        "./src/components/startup-loader.tsx",
+        "./src/components/sync-badge.tsx",
+        "./src/components/themed-text.tsx",
+        "./src/components/themed-view.tsx",
+        "./src/components/web-badge.tsx",
+        "./src/components/ui/collapsible.tsx",
+        "./src/store/auth-context.tsx",
+        "./src/store/sync-context.tsx",
+        "./.expo/types/router.d.ts"
+    ],
+    "include": [
+        "**/*.ts",
+        "**/*.tsx",
+        ".expo/types/**/*.ts",
+        "expo-env.d.ts"
+    ],
+    "exclude": [
+        "D:/French Game App/Frontend/GamiFrench/node_modules",
+        "D:/French Game App/Frontend/GamiFrench/babel.config.js",
+        "D:/French Game App/Frontend/GamiFrench/metro.config.js",
+        "D:/French Game App/Frontend/GamiFrench/jest.config.js",
+        "D:/French Game App/Frontend/GamiFrench/android",
+        "D:/French Game App/Frontend/GamiFrench/ios"
+    ]
+}

@@ -1,17 +1,18 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GameHeader, PrimaryButton } from '@/components/game-ui';
-import { authenticatedRequest, useAuth } from '@/store/auth-context';
+import { useAuth } from '@/store/auth-context';
 
 const SUS_VERSION = 'v1.0';
 const SUS_ITEMS = [
@@ -27,9 +28,36 @@ const SUS_ITEMS = [
   { id: 10, statement: 'I needed to learn a lot of things before I could get going with GamiFrench.', positive: false },
 ];
 
+/* Optional open-ended answers, saved with the survey as `responses.comments`. */
+const COMMENT_MAX_LENGTH = 1000;
+const COMMENT_FIELDS = [
+  {
+    key: 'thoughts',
+    icon: '💭',
+    label: 'Your thoughts',
+    placeholder: 'What do you think of GamiFrench so far?',
+  },
+  {
+    key: 'suggestions',
+    icon: '🛠️',
+    label: 'Suggestions',
+    placeholder: 'What could we improve or fix?',
+  },
+  {
+    key: 'recommendations',
+    icon: '💡',
+    label: 'Recommendations',
+    placeholder: 'What would you like us to add next?',
+  },
+];
+const EMPTY_COMMENTS = { thoughts: '', suggestions: '', recommendations: '' };
+
 export default function Feedback() {
   const { session, authenticatedRequest } = useAuth();
   const [selections, setSelections] = useState(new Array(SUS_ITEMS.length).fill(null));
+  const [comments, setComments] = useState(EMPTY_COMMENTS);
+  // Read by the focus effect without being one of its dependencies (see below).
+  const submittedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState(null);
@@ -39,10 +67,25 @@ export default function Feedback() {
 
   const onSelect = useCallback((itemIndex, choice) => {
     setError('');
-    const next = [...selections];
-    next[itemIndex] = choice;
-    setSelections(next);
-  }, [selections]);
+    // Updater form: quick taps on several questions never overwrite each other.
+    setSelections((current) => {
+      const next = [...current];
+      next[itemIndex] = choice;
+      return next;
+    });
+  }, []);
+
+  const onCommentChange = useCallback((key, text) => {
+    setComments((current) => ({ ...current, [key]: text }));
+  }, []);
+
+  const resetForm = useCallback(() => {
+    submittedRef.current = false;
+    setSubmitted(false);
+    setScore(null);
+    setSelections(new Array(SUS_ITEMS.length).fill(null));
+    setComments(EMPTY_COMMENTS);
+  }, []);
 
   const submit = useCallback(async () => {
     if (!allAnswered) return;
@@ -54,10 +97,19 @@ export default function Feedback() {
         body: JSON.stringify({
           surveyType: 'sus',
           version: SUS_VERSION,
-          responses: { items: selections },
+          responses: {
+            items: selections,
+            // Only the boxes the learner actually filled in are sent.
+            comments: Object.fromEntries(
+              Object.entries(comments)
+                .map(([key, text]) => [key, text.trim()])
+                .filter(([, text]) => text.length > 0),
+            ),
+          },
         }),
       });
       setScore(json.susScore ?? null);
+      submittedRef.current = true;
       setSubmitted(true);
     } catch (err) {
       console.log('[Feedback] submission failed', err);
@@ -67,16 +119,15 @@ export default function Feedback() {
     } finally {
       setSubmitting(false);
     }
-  }, [authenticatedRequest, selections, allAnswered]);
+  }, [authenticatedRequest, selections, comments, allAnswered]);
 
   useFocusEffect(
     useCallback(() => {
-      if (submitted) {
-        setSubmitted(false);
-        setScore(null);
-        setSelections(new Array(SUS_ITEMS.length).fill(null));
-      }
-    }, [submitted]),
+      // Coming back to a finished survey starts a fresh one. This must run
+      // only on focus: depending on `submitted` re-ran it the moment the
+      // survey was sent and hid the thank-you screen straight away.
+      if (submittedRef.current) resetForm();
+    }, [resetForm]),
   );
 
   const userName = session?.user?.displayName ?? 'there';
@@ -92,7 +143,7 @@ export default function Feedback() {
             <Text style={styles.scoreNote}>50 is the midpoint. Above 68 is considered above average.</Text>
             <Text style={styles.thankYou}>Thanks for helping us improve GamiFrench, {userName}.</Text>
           </View>
-          <PrimaryButton onPress={() => { setSubmitted(false); setScore(null); setSelections(new Array(SUS_ITEMS.length).fill(null)); }}>Take the survey again</PrimaryButton>
+          <PrimaryButton onPress={resetForm}>Take the survey again</PrimaryButton>
           <TouchableOpacity accessibilityRole="button" activeOpacity={0.8} onPress={() => router.back()} style={styles.backLink}>
             <Text style={styles.backLinkText}>‹ Back to profile</Text>
           </TouchableOpacity>
@@ -103,7 +154,13 @@ export default function Feedback() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      {/* Keeps the comment box being typed in above the keyboard. */}
+      <KeyboardAwareScrollView
+        bottomOffset={24}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <GameHeader eyebrow="Feedback" title="Share your feedback" back />
         <View style={styles.intro}>
           <Text style={styles.introTitle}>System Usability Scale</Text>
@@ -133,11 +190,39 @@ export default function Feedback() {
           </View>
         ))}
 
+        <View style={styles.commentsIntro}>
+          <Text style={styles.introTitle}>Tell us more</Text>
+          <Text style={styles.introText}>Optional — share anything in your own words. Every comment is read by the GamiFrench team.</Text>
+        </View>
+
+        {COMMENT_FIELDS.map((field) => {
+          const value = comments[field.key];
+          return (
+            <View key={field.key} style={styles.commentCard}>
+              <Text style={styles.commentLabel}>{field.icon} {field.label}</Text>
+              <TextInput
+                value={value}
+                onChangeText={(text) => onCommentChange(field.key, text)}
+                placeholder={field.placeholder}
+                placeholderTextColor="#94A3B8"
+                multiline
+                textAlignVertical="top"
+                maxLength={COMMENT_MAX_LENGTH}
+                editable={!submitting}
+                style={styles.commentInput}
+                accessibilityLabel={field.label}
+                accessibilityHint={field.placeholder}
+              />
+              <Text style={styles.commentCount}>{value.length}/{COMMENT_MAX_LENGTH}</Text>
+            </View>
+          );
+        })}
+
         <View style={styles.actions}>
           <PrimaryButton disabled={!allAnswered || submitting} onPress={submit}>{submitting ? 'Sending…' : 'Submit feedback'}</PrimaryButton>
           {!allAnswered && <Text style={styles.hint}>Please answer all {SUS_ITEMS.length} questions before submitting.</Text>}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -270,6 +355,44 @@ const styles = StyleSheet.create({
   },
   scaleDot: {
     fontSize: 20,
+    color: '#94A3B8',
+  },
+  commentsIntro: {
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  commentCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  commentLabel: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#182133',
+    marginBottom: 8,
+  },
+  commentInput: {
+    minHeight: 96,
+    maxHeight: 200,
+    borderWidth: 1.5,
+    borderColor: '#D8DEE9',
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
+    fontSize: 15,
+    lineHeight: 21,
+    color: '#182133',
+  },
+  commentCount: {
+    alignSelf: 'flex-end',
+    marginTop: 6,
+    fontSize: 12,
     color: '#94A3B8',
   },
   actions: {

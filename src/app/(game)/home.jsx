@@ -26,7 +26,7 @@ import Svg, { Path } from 'react-native-svg';
 import { getChallengeCycle } from '@/data/challenges/challengeCatalog';
 import { sounds } from '@/services/sound';
 import { ENGLISH_LOCALE, speak, stopAll as stopAllSpeech } from '@/services/voice';
-import { getCountryForModule, getCountryTopics, getDefaultModuleId, getModuleLabel, lessonCatalog } from '@/data/lessons/catalog';
+import { getCountryForModule, getCountryTopics, getDefaultModuleId, getModuleLabel } from '@/data/lessons/catalog';
 import { missionCatalog } from '@/data/lessons/missionCatalog';
 import { isNodeComplete, isMissionComplete } from '@/data/lessons/nodeProgress';
 import { getModuleLearningTarget } from '@/data/lessons/nextTarget';
@@ -47,7 +47,7 @@ import {
   loadModuleQuizResults,
   mergeClaimedMissions,
 } from '@/store/lesson-progress';
-import { getStartupAssessment, hasStartupAssessment } from '@/store/profile-cache';
+import { getAllStartupAssessments, hasStartupAssessment } from '@/store/profile-cache';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
   Dimensions.get('window');
@@ -644,87 +644,78 @@ export default function Home() {
       let mounted = true;
 
       const refreshProgress = async () => {
-        const storedClaims = await loadClaimedMissions();
-        const lastPlayed = await loadLastPlayedTopic();
-
         /*
+         * 1. Device first. Everything below is read from this device in
+         *    parallel and shown right away, so the map is usable even while
+         *    the Render server is waking up (which can take a minute+).
+         *    The device mirror is additive and never over-reports (see
+         *    mergeServerContentIntoLocal), so it is safe to show before the
+         *    server answers.
+         *
          * Today's challenge set and the matching progress are read from the
          * local challenge store (see src/store/challenge-progress.js).
          */
-        const storedChallengeState = await loadChallengeState();
+        const [
+          storedClaims,
+          lastPlayed,
+          storedChallengeState,
+          localLessonProgress,
+          localQuizResults,
+          startup,
+        ] = await Promise.all([
+          // One unreadable store must never stop the others, or the server
+          // refresh below.
+          loadClaimedMissions().catch(() => []),
+          loadLastPlayedTopic().catch(() => null),
+          loadChallengeState().catch(() => null),
+          loadLessonProgress().catch(() => ({})),
+          loadModuleQuizResults().catch(() => ({})),
+          getAllStartupAssessments().catch(() => ({})),
+        ]);
         const challengeCycle = getChallengeCycle();
 
+        if (!mounted) return;
+        setLessonProgress(localLessonProgress);
+        setClaimedMissions(storedClaims);
+        setLastPlayedTopic(lastPlayed);
+        setQuizResults({ ...localQuizResults });
+        setStartupAssessments(startup);
+        setChallengeOverview(
+          buildDailyOverview(storedChallengeState, challengeCycle)
+        );
+
+        /*
+         * 2. Server second. Fold its completions into the device mirror and
+         *    refresh what depends on it. `mergeServerContentIntoLocal` buckets
+         *    every sub-lesson under the country of its own module, so Morocco,
+         *    Italy, ... each keep their own list instead of everything piling
+         *    up under Canada (see the PROGRESS_COUNTRY note below).
+         */
         try {
           const serverProgress = await authenticatedRequest('/progress');
+          if (!mounted) return;
 
-          if (mounted) {
-            setProgress(serverProgress);
+          setProgress(serverProgress);
+          await applyServerProgress(serverProgress);
+          const mergedLessonProgress = await loadLessonProgress();
+          if (!mounted) return;
 
-            /*
-             * Fold the server completions into the device mirror before
-             * reading it back. `mergeServerContentIntoLocal` buckets every
-             * sub-lesson under the country of its own module, so Morocco,
-             * Italy, ... each keep their own list instead of everything
-             * piling up under Canada (see the PROGRESS_COUNTRY note below).
-             */
-            await applyServerProgress(serverProgress);
-            setLessonProgress(await loadLessonProgress());
-            setChallengeOverview(
-              buildDailyOverview(storedChallengeState, challengeCycle, {
-                streak: Number(serverProgress.streak) || 0,
-              })
-            );
-            setClaimedMissions(
-              mergeClaimedMissions(
-                claimedMissionsFromServer(serverProgress.lessons),
-                storedClaims
-              )
-            );
-            setLastPlayedTopic(lastPlayed);
-            setQuizResults({ ...(await loadModuleQuizResults()) });
-
-            /* Load startup assessments for all modules (local cache, works offline). */
-            const startup = {};
-            for (const mod of lessonCatalog) {
-              try {
-                const a = await getStartupAssessment(mod.id);
-                if (a) startup[mod.id] = a;
-              } catch {
-                // Ignore per-module load failures.
-              }
-            }
-            setStartupAssessments(startup);
-          }
+          // New object: the store may hand back the same (mutated) reference.
+          setLessonProgress({ ...(mergedLessonProgress ?? {}) });
+          setChallengeOverview(
+            buildDailyOverview(storedChallengeState, challengeCycle, {
+              streak: Number(serverProgress.streak) || 0,
+            })
+          );
+          setClaimedMissions(
+            mergeClaimedMissions(
+              claimedMissionsFromServer(serverProgress.lessons),
+              storedClaims
+            )
+          );
         } catch (error) {
+          // Offline or server asleep: the device copy shown above stays.
           console.log('Failed to load server home progress:', error);
-          if (mounted) {
-            /*
-             * The device mirror is additive and never over-reports (see
-             * mergeServerContentIntoLocal), so it is safe to show even when the
-             * server could not be reached. Falling back to the local list is
-             * what lets a player who finished a module offline still walk past
-             * that stop instead of being pushed back to the beginning.
-             */
-            setLessonProgress(await loadLessonProgress());
-            setClaimedMissions(storedClaims);
-            setLastPlayedTopic(lastPlayed);
-            setQuizResults({ ...(await loadModuleQuizResults()) });
-
-            /* Load startup assessments for all modules (local cache, works offline). */
-            const startup = {};
-            for (const mod of lessonCatalog) {
-              try {
-                const a = await getStartupAssessment(mod.id);
-                if (a) startup[mod.id] = a;
-              } catch {
-                // Ignore per-module load failures.
-              }
-            }
-            setStartupAssessments(startup);
-            setChallengeOverview(
-              buildDailyOverview(storedChallengeState, challengeCycle)
-            );
-          }
         }
       };
 

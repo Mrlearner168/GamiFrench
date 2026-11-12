@@ -5,6 +5,8 @@
 import {
   SPEAKING_THRESHOLD,
   normalizeForScoring,
+  normalizeFrenchPhrase,
+  numberToFrenchWords,
   scorePronunciation,
   tokenize,
 } from '@/services/pronunciation';
@@ -70,5 +72,47 @@ describe('scorePronunciation', () => {
     const near = scorePronunciation('ami', 'amis');
     expect(near.score).toBeGreaterThan(0);
     expect(near.score).toBeLessThan(100);
+  });
+});
+
+describe('scorePronunciation rejects wrong speech', () => {
+  it.each([
+    ['Bonjour', 'bonsoir'],
+    ['sous la table', 'sur la table'],
+    ['Je suis prêt, on y va', 'va y on prêt suis je'],
+    [
+      'Je suis prêt, on y va',
+      'je suis prêt on y va et puis le chat mange une pomme rouge dans la maison bleue ce soir',
+    ],
+  ])('%s <- %s does not pass', (target, heard) => {
+    expect(scorePronunciation(target, heard).passed).toBe(false);
+  });
+
+  it('still passes a slightly mis-heard word', () => {
+    expect(scorePronunciation('Je voudrais un café', 'je voudrai un cafe').passed).toBe(true);
+  });
+});
+
+describe('French numbers and elision', () => {
+  it.each([
+    [11, 'onze'],
+    [17, 'dix sept'],
+    [71, 'soixante et onze'],
+    [80, 'quatre vingts'],
+    [91, 'quatre vingt onze'],
+    [200, 'deux cents'],
+    [371, 'trois cent soixante et onze'],
+  ])('%i -> %s', (value, words) => {
+    expect(numberToFrenchWords(value)).toBe(words);
+  });
+
+  it('accepts spoken numbers for digits on the card', () => {
+    expect(scorePronunciation('Il est 17 heures', 'il est dix-sept heures').score).toBe(100);
+    expect(scorePronunciation('Le 14 juillet', 'le quatorze juillet').score).toBe(100);
+  });
+
+  it("treats j'ai and je ai alike", () => {
+    expect(normalizeFrenchPhrase("j'ai")).toBe('je ai');
+    expect(scorePronunciation("J'ai vingt ans", 'je ai vingt ans').score).toBe(100);
   });
 });

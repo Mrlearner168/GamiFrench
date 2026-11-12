@@ -461,13 +461,13 @@ export const missionCatalog = [
     id: 'mission-21',
     moduleId: 'module-10',
 
-    title: 'Globalization & Ethics',
+    title: 'The World & Values',
     description:
-      'Discuss globalization and ethical questions in modern France.',
+      'Talk about the world, the planet and what is fair, with simple opinions.',
 
     objectives: [
-      { id: 'mission-21-objective-1', title: 'Globalization', type: 'subLesson', targetId: 'm10-l1-globalization' },
-      { id: 'mission-21-objective-2', title: 'Ethics', type: 'subLesson', targetId: 'm10-l2-ethics' },
+      { id: 'mission-21-objective-1', title: 'The world', type: 'subLesson', targetId: 'm10-l1-globalization' },
+      { id: 'mission-21-objective-2', title: 'Values & opinions', type: 'subLesson', targetId: 'm10-l2-ethics' },
     ],
 
     rewards: {
@@ -480,12 +480,12 @@ export const missionCatalog = [
     id: 'mission-22',
     moduleId: 'module-10',
 
-    title: 'Media Analysis & Final Mastery',
+    title: 'The News & Final Review',
     description:
-      'Analyse media, spot bias and master advanced French argumentation.',
+      'Check if news is true, then show everything you learned in the final challenge.',
 
     objectives: [
-      { id: 'mission-22-objective-1', title: 'Media analysis', type: 'subLesson', targetId: 'm10-l3-media-analysis' },
+      { id: 'mission-22-objective-1', title: 'The news', type: 'subLesson', targetId: 'm10-l3-media-analysis' },
       { id: 'mission-22-objective-2', title: 'Final mastery challenge', type: 'subLesson', targetId: 'm10-l4-mastery' },
     ],
 

@@ -4,11 +4,15 @@ import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SyncBadge } from '@/components/sync-badge';
+import { useDailyReminders } from '@/hooks/use-daily-reminders';
 import { useAuth } from '@/store/auth-context';
 
 export default function GameLayout() {
   const { session, isLoading } = useAuth();
   const insets = useSafeAreaInsets();
+
+  // Daily improvement reminders: asked once, then re-planned on every visit.
+  useDailyReminders(session);
 
   useEffect(() => {
     console.log('[GameLayout] auth state', {

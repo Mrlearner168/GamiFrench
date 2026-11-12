@@ -1,5 +1,6 @@
 import { isOfflineError } from '@/services/apiClient';
 import { SettingSwitchRow } from '@/components/toggle-switch';
+import { openPrivacyPolicy } from '@/components/privacy-policy-link';
 import {
   hasStoredAudioChoice,
   isMusicEnabled,
@@ -13,12 +14,22 @@ import {
   syncSoundEnabledFromServer,
 } from '@/services/sound';
 import { DEFAULT_MODEL, ensureModel, isModelReady, isWhisperAvailable } from '@/services/whisperEngine';
+import {
+    hasReminderPermission,
+    isReminderSupported,
+    loadReminderPrefs,
+    setReminderTime,
+    setRemindersEnabled,
+} from '@/services/dailyReminder';
+import { REMINDER_TIMES, reminderTime } from '@/services/reminder-messages';
 import { useAuth } from '@/store/auth-context';
 import { readSettingsCache, saveSettingsCache } from '@/store/profile-cache';
 import { useSync } from '@/store/sync-context';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
+    Linking,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -46,10 +57,23 @@ export default function Settings() {
   /* Background music: separate ambience switch. */
   const [musicOn, setMusicOn] = useState(isMusicEnabled());
 
+  /* Daily improvement reminders (local notifications on this device). */
+  const [reminderOn, setReminderOn] = useState(true);
+  const [reminderTimeId, setReminderTimeId] = useState('evening');
+  const [reminderAllowed, setReminderAllowed] = useState(true);
+  const reminderName = session?.user?.displayName ?? '';
+
   useEffect(() => {
     isModelReady(DEFAULT_MODEL.name).then(setModelReady);
     loadSoundEnabled().then((value) => setSoundOn(value));
     loadMusicEnabled().then((value) => setMusicOn(value));
+    if (isReminderSupported) {
+        loadReminderPrefs().then((prefs) => {
+            setReminderOn(prefs.enabled);
+            setReminderTimeId(prefs.timeId);
+        });
+        hasReminderPermission().then(setReminderAllowed);
+    }
   }, []);
 
   const downloadModel = async () => {
@@ -150,6 +174,27 @@ export default function Settings() {
   // The audio switches below replace the server's read-only "Audio cues" row.
   const otherPreferences = preferences.filter((item) => item.key !== 'audio');
 
+  const toggleReminder = async (next) => {
+    setReminderOn(next);
+    try {
+        const result = await setRemindersEnabled(next, { name: reminderName });
+        setReminderAllowed(result.permission);
+    } catch (err) {
+        console.log('[Settings] reminder toggle failed', err);
+    }
+  };
+
+  const chooseReminderTime = async (timeId) => {
+    setReminderTimeId(timeId);
+    try {
+        await setReminderTime(timeId, { name: reminderName });
+    } catch (err) {
+        console.log('[Settings] reminder time failed', err);
+    }
+  };
+
+  const chosenReminder = reminderTime(reminderTimeId);
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -195,6 +240,65 @@ export default function Settings() {
           <Text style={styles.soundNote}>
             French pronunciation audio in lessons always plays, so you can hear every word.
           </Text>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Daily reminders</Text>
+          {isReminderSupported ? (
+            <>
+              <SettingSwitchRow
+                icon={reminderOn ? '🔔' : '🔕'}
+                title="Daily improvement nudge"
+                description="A fun daily reminder to keep your streak and French growing."
+                value={reminderOn}
+                onChange={toggleReminder}
+                last
+              />
+              {reminderOn ? (
+                <>
+                  <Text style={styles.reminderLabel}>Remind me at</Text>
+                  <View style={styles.reminderChips}>
+                    {REMINDER_TIMES.map((time) => {
+                      const selected = time.id === reminderTimeId;
+                      return (
+                        <Pressable
+                          key={time.id}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected }}
+                          onPress={() => chooseReminderTime(time.id)}
+                          style={[styles.reminderChip, selected && styles.reminderChipSelected]}
+                        >
+                          <Text style={[styles.reminderChipLabel, selected && styles.reminderChipTextSelected]}>
+                            {time.label}
+                          </Text>
+                          <Text style={[styles.reminderChipTime, selected && styles.reminderChipTextSelected]}>
+                            {`${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}`}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {reminderAllowed ? (
+                    <Text style={styles.soundNote}>
+                      Next nudge around {String(chosenReminder.hour).padStart(2, '0')}:
+                      {String(chosenReminder.minute).padStart(2, '0')} — skipped on days you already practised.
+                    </Text>
+                  ) : (
+                    <View style={styles.reminderBlocked}>
+                      <Text style={styles.reminderBlockedText}>
+                        Notifications are turned off for GamiFrench on this phone.
+                      </Text>
+                      <Pressable onPress={() => Linking.openSettings()} accessibilityRole="button">
+                        <Text style={styles.reminderBlockedLink}>Open phone settings</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </>
+              ) : null}
+            </>
+          ) : (
+            <Text style={styles.soundNote}>Daily reminders are available in the Android and iOS app.</Text>
+          )}
         </View>
 
         <View style={styles.sectionCard}>
@@ -274,6 +378,27 @@ export default function Settings() {
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Account</Text>
+          {session?.user?.role === 'teacher' ? (
+            <TouchableOpacity
+              style={styles.preferenceRow}
+              activeOpacity={0.8}
+              onPress={() => {
+                sounds.tap();
+                router.push('/share-teacher-code');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open share teacher code screen"
+            >
+              <View style={styles.preferenceText}>
+                <Text style={styles.preferenceTitle}>Your teacher code</Text>
+                <Text style={styles.preferenceSubtitle}>
+                  Show, copy or rotate the shareable code students type on the
+                  register screen.
+                </Text>
+              </View>
+              <Text style={styles.preferenceValue}>Open</Text>
+            </TouchableOpacity>
+          ) : null}
           <View style={styles.preferenceRow}>
             <View style={styles.preferenceText}>
               <Text style={styles.preferenceTitle}>Signed in as</Text>
@@ -282,12 +407,24 @@ export default function Settings() {
               </Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.preferenceRow} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.preferenceRow}
+            activeOpacity={0.8}
+            onPress={() => {
+              sounds.tap();
+              openPrivacyPolicy();
+            }}
+            accessibilityRole="link"
+            accessibilityLabel="Open the GamiFrench privacy policy"
+          >
             <View style={styles.preferenceText}>
-              <Text style={styles.preferenceTitle}>Privacy</Text>
-              <Text style={styles.preferenceSubtitle}>Manage data and app permissions.</Text>
+              <Text style={styles.preferenceTitle}>Privacy Policy</Text>
+              <Text style={styles.preferenceSubtitle}>
+                How your data is collected, used and shared. Opens in your
+                browser.
+              </Text>
             </View>
-            <Text style={styles.preferenceValue}>Public</Text>
+            <Text style={styles.preferenceValue}>Open</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.preferenceRow} activeOpacity={0.8}>
             <View style={styles.preferenceText}>
@@ -375,6 +512,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
     lineHeight: 20,
+  },
+  reminderLabel: {
+    marginTop: 14,
+    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  reminderChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  reminderChip: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#D8DEE9',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+    minWidth: 76,
+  },
+  reminderChipSelected: {
+    borderColor: '#1476D4',
+    backgroundColor: '#1476D4',
+  },
+  reminderChipLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#182133',
+  },
+  reminderChipTime: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  reminderChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  reminderBlocked: {
+    marginTop: 12,
+    backgroundColor: '#FFF8E6',
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
+  },
+  reminderBlockedText: {
+    fontSize: 13,
+    color: '#8A5A00',
+    lineHeight: 18,
+  },
+  reminderBlockedLink: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1476D4',
   },
   soundNote: {
     marginTop: 12,

@@ -19,7 +19,7 @@
  */
 
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
-import * as SecureStore from 'expo-secure-store';
+import { storageGet, storageSet } from '@/store/storage';
 
 const SOUND_ENABLED_KEY = 'gamifrench.sound-enabled';
 const MUSIC_ENABLED_KEY = 'gamifrench.music-enabled';
@@ -153,7 +153,7 @@ export function pauseMusic() {
 export async function setMusicEnabled(value) {
   musicEnabled = value !== false;
   try {
-    await SecureStore.setItemAsync(MUSIC_ENABLED_KEY, musicEnabled ? '1' : '0');
+    await storageSet(MUSIC_ENABLED_KEY, musicEnabled ? '1' : '0');
   } catch {
     // Persistence is best-effort; in-memory flag still applies.
   }
@@ -167,7 +167,7 @@ export function isMusicEnabled() {
 
 export async function loadMusicEnabled() {
   try {
-    const stored = await SecureStore.getItemAsync(MUSIC_ENABLED_KEY);
+    const stored = await storageGet(MUSIC_ENABLED_KEY);
     if (stored === '0') musicEnabled = false;
     else if (stored === '1') musicEnabled = true;
   } catch {
@@ -209,7 +209,7 @@ export function isAudioUnlocked() {
 export async function setSoundEnabled(value) {
   enabled = value !== false;
   try {
-    await SecureStore.setItemAsync(SOUND_ENABLED_KEY, enabled ? '1' : '0');
+    await storageSet(SOUND_ENABLED_KEY, enabled ? '1' : '0');
   } catch {
     // Persistence is best-effort; in-memory flag still applies.
   }
@@ -223,7 +223,7 @@ export function isSoundEnabled() {
 /** Restore the persisted mute state. Call once from the root layout. */
 export async function loadSoundEnabled() {
   try {
-    const stored = await SecureStore.getItemAsync(SOUND_ENABLED_KEY);
+    const stored = await storageGet(SOUND_ENABLED_KEY);
     if (stored === '0') enabled = false;
     else if (stored === '1') enabled = true;
   } catch {
@@ -248,7 +248,7 @@ export async function syncSoundEnabledFromServer(value) {
  */
 export async function hasStoredAudioChoice(kind = 'sound') {
   try {
-    const stored = await SecureStore.getItemAsync(
+    const stored = await storageGet(
       kind === 'music' ? MUSIC_ENABLED_KEY : SOUND_ENABLED_KEY
     );
     return stored === '0' || stored === '1';

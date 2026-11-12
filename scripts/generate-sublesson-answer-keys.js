@@ -21,16 +21,17 @@ const vm = require('vm');
 /*
  * Only these question types are shown by the sub-lesson quiz stage
  * (see quizItems in src/app/(game)/sublesson.jsx); a question without a type
- * is multiple choice. fill-blank and listening questions are filtered out of
- * the quiz, so they never count towards the score.
+ * is multiple choice. fill-blank questions are filtered out of the quiz, so
+ * they never count towards the score.
  */
-const GRADED_QUIZ_TYPES = ['multiple-choice', 'true-false', 'sentence-builder'];
+const GRADED_QUIZ_TYPES = ['multiple-choice', 'true-false', 'sentence-builder', 'listening'];
 
 // Mirrors QUIZ_POINTS in sublesson.jsx and QUESTION_POINTS on the server.
 const QUESTION_POINTS = {
   'multiple-choice': 10,
   'true-false': 10,
   'sentence-builder': 20,
+  listening: 10,
 };
 
 const MODULE_COUNT = 10;

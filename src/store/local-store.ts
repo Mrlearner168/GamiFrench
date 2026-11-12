@@ -1,5 +1,5 @@
 /**
- * Chunked JSON storage on top of SecureStore.
+ * Chunked JSON storage on top of `@/store/storage`.
  *
  * SecureStore is capped at roughly 2 KB per value on Android (the platform
  * warns and can silently drop larger writes). The offline queue and the device
@@ -14,9 +14,9 @@
  * Note: SecureStore keys may only contain alphanumerics, ".", "-" and "_", so
  * chunk keys use "-cN" / "-chunks" rather than a colon.
  */
-import * as SecureStore from 'expo-secure-store';
+import { storageDelete, storageGet, storageSet } from '@/store/storage';
 
-/** Characters per SecureStore value (comfortably under the ~2 KB limit). */
+/** Characters per storage value (comfortably under the ~2 KB limit). */
 const CHUNK_SIZE = 1500;
 
 const chunkKey = (key: string, index: number) => `${key}-c${index}`;
@@ -24,14 +24,14 @@ const manifestKey = (key: string) => `${key}-chunks`;
 
 async function deleteChunks(key: string): Promise<void> {
   try {
-    const manifest = await SecureStore.getItemAsync(manifestKey(key));
+    const manifest = await storageGet(manifestKey(key));
     if (!manifest) return;
 
     const count = Number(manifest) || 0;
     for (let index = 0; index < count; index += 1) {
-      await SecureStore.deleteItemAsync(chunkKey(key, index));
+      await storageDelete(chunkKey(key, index));
     }
-    await SecureStore.deleteItemAsync(manifestKey(key));
+    await storageDelete(manifestKey(key));
   } catch (error) {
     console.log(`[LocalStore] deleteChunks failed for ${key}`, error);
   }
@@ -40,20 +40,20 @@ async function deleteChunks(key: string): Promise<void> {
 /** Read and parse a JSON value, transparently handling chunked or legacy data. */
 export async function readJson<T>(key: string, fallback: T): Promise<T> {
   try {
-    const manifest = await SecureStore.getItemAsync(manifestKey(key));
+    const manifest = await storageGet(manifestKey(key));
 
     if (manifest) {
       const count = Number(manifest) || 0;
       let raw = '';
       for (let index = 0; index < count; index += 1) {
-        const part = await SecureStore.getItemAsync(chunkKey(key, index));
+        const part = await storageGet(chunkKey(key, index));
         if (part == null) return fallback;
         raw += part;
       }
       return JSON.parse(raw) as T;
     }
 
-    const single = await SecureStore.getItemAsync(key);
+    const single = await storageGet(key);
     return single ? (JSON.parse(single) as T) : fallback;
   } catch (error) {
     console.log(`[LocalStore] readJson failed for ${key}`, error);
@@ -67,7 +67,7 @@ export async function writeJson(key: string, value: unknown): Promise<void> {
     const raw = JSON.stringify(value);
 
     if (raw.length <= CHUNK_SIZE) {
-      await SecureStore.setItemAsync(key, raw);
+      await storageSet(key, raw);
       await deleteChunks(key);
       return;
     }
@@ -77,13 +77,13 @@ export async function writeJson(key: string, value: unknown): Promise<void> {
       chunks.push(raw.slice(index, index + CHUNK_SIZE));
     }
 
-    await SecureStore.setItemAsync(manifestKey(key), String(chunks.length));
+    await storageSet(manifestKey(key), String(chunks.length));
     for (let index = 0; index < chunks.length; index += 1) {
-      await SecureStore.setItemAsync(chunkKey(key, index), chunks[index]);
+      await storageSet(chunkKey(key, index), chunks[index]);
     }
 
     // Drop any stale single-value copy from a previous small write.
-    await SecureStore.deleteItemAsync(key);
+    await storageDelete(key);
   } catch (error) {
     console.log(`[LocalStore] writeJson failed for ${key}`, error);
   }
@@ -92,7 +92,7 @@ export async function writeJson(key: string, value: unknown): Promise<void> {
 /** Remove both the plain value and any chunks/manifest for a key. */
 export async function removeJson(key: string): Promise<void> {
   try {
-    await SecureStore.deleteItemAsync(key);
+    await storageDelete(key);
     await deleteChunks(key);
   } catch (error) {
     console.log(`[LocalStore] removeJson failed for ${key}`, error);

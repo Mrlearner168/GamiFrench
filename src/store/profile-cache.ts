@@ -132,6 +132,15 @@ export async function getStartupAssessment(
   return stored[moduleKey] ?? null;
 }
 
+/**
+ * Every stored startup assessment, keyed by module id, in one read.
+ * Screens that need several modules use this instead of calling
+ * `getStartupAssessment` per module (one SecureStore read each).
+ */
+export async function getAllStartupAssessments(): Promise<Record<string, StartupAssessment>> {
+  return (await readJson<Record<string, StartupAssessment>>(startupKey(), {})) ?? {};
+}
+
 /** Whether a startup diagnostic has been taken for a module. */
 export async function hasStartupAssessment(moduleKey: string): Promise<boolean> {
   const assessment = await getStartupAssessment(moduleKey);
